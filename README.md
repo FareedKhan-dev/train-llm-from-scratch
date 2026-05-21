@@ -7,7 +7,7 @@
   
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue) ![License](https://img.shields.io/badge/License-MIT-green) ![Contributions](https://img.shields.io/badge/Contributions-Welcome-blue) [![Docs](https://img.shields.io/badge/Docs-Available-success)](#step-by-step-code-explanation)
 
-**I am Looking for a PhD position in AI**. Take a look at my [Resume](https://drive.google.com/file/d/1Q_iklJ1RVGSb-Pdey8BHy3k8IF3UJv0z/view?usp=sharing) or [GitHub](https://github.com/FareedKhan-dev)
+**I am Looking for a PhD position in AI**. [GitHub](https://github.com/FareedKhan-dev)
 
 </div>
 
