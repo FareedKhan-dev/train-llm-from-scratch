@@ -640,6 +640,7 @@ class MultiHeadAttention(nn.Module):
     def __init__(self, n_head, n_embed, context_length):
         super().__init__()
         self.heads = nn.ModuleList([Head(n_embed // n_head, n_embed, context_length) for _ in range(n_head)])
+        self.proj = nn.Linear(n_embed, n_embed)
 
     def forward(self, x):
         """
@@ -653,10 +654,12 @@ class MultiHeadAttention(nn.Module):
         """
         # Concatenate the output of each head along the last dimension (C)
         x = torch.cat([h(x) for h in self.heads], dim=-1)
+        # Apply final linear projection
+        x = self.proj(x)
         return x
 ```
 
-Now that we have defined the MultiHeadAttention class, which combines multiple attention heads, the __init__ method initializes a list of Head instances (a total of n_head), each with a head_size of n_embed // n_head. The forward method applies each attention head to the input x and concatenates their outputs along the last dimension, merging the information learned by each head.
+Now that we have defined the MultiHeadAttention class, which combines multiple attention heads, the __init__ method initializes a list of Head instances (a total of n_head), each with a head_size of n_embed // n_head, along with a final projection layer. The forward method applies each attention head to the input x, concatenates their outputs along the last dimension, and projects them linearly to merge the information learned by each head.
 
 ### Transformer Block
 
