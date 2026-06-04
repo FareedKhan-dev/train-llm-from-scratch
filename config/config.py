@@ -27,6 +27,27 @@ T_OUT_PATH = "models/transformer_B.pt"  # Path to save the trained model
 # Device configuration
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
+# --- Memory Optimisation Flags ---
+# These flags help the default 3B-param model fit on consumer GPUs (e.g. RTX 3090/4090/5090)
+# and even on an A100 40GB, which OOMs with vanilla FP32 training.
+
+# Automatic Mixed Precision: switches to BF16 (NVIDIA >=Ampere) or FP16 for forward+activations.
+# Saves ~50 % VRAM on parameters and activations with negligible accuracy impact.
+USE_AMP = True
+AMP_DTYPE = 'bf16'  # 'bf16' (recommended for Ampere+) or 'fp16'
+
+# Gradient checkpointing: recomputes activations during backward instead of storing them.
+# Trades ~20-30 % slower training for dramatically lower activation VRAM.
+USE_GRADIENT_CHECKPOINTING = True
+
+# Split each batch into micro-batches of this size for gradient accumulation.
+# A lower micro_batch_size reduces peak activation VRAM proportionally.
+# Set to 0 to disable (use the full batch).
+MICRO_BATCH_SIZE = 4
+
+# If True, print an estimated VRAM budget before training starts.
+REPORT_MEMORY_BUDGET = True
+
 # Store all configurations in a dictionary for easy access and modification
 default_config = {
     'vocab_size': VOCAB_SIZE,
@@ -46,4 +67,11 @@ default_config = {
     't_lr_decayed': T_LR_DECAYED,
     't_out_path': T_OUT_PATH,
     'device': DEVICE,
+
+    # Memory optimisation
+    'use_amp': USE_AMP,
+    'amp_dtype': AMP_DTYPE,
+    'use_gradient_checkpointing': USE_GRADIENT_CHECKPOINTING,
+    'micro_batch_size': MICRO_BATCH_SIZE,
+    'report_memory_budget': REPORT_MEMORY_BUDGET,
 }
