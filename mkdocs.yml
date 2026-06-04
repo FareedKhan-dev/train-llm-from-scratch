@@ -1,0 +1,83 @@
+site_name: Train LLM From Scratch
+site_description: From pretraining to RLHF/GRPO — every algorithm hand-written in pure PyTorch.
+site_url: https://FareedKhan-dev.github.io/train-llm-from-scratch/
+repo_url: https://github.com/FareedKhan-dev/train-llm-from-scratch
+repo_name: FareedKhan-dev/train-llm-from-scratch
+docs_dir: docs
+# Files present under docs/ but intentionally not page nodes in the nav.
+not_in_nav: |
+  /diagrams/README.md
+# Keep the raw mermaid sources out of the built site.
+exclude_docs: |
+  /diagrams/src/
+
+theme:
+  name: material
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: teal
+      toggle: {icon: material/weather-night, name: Switch to dark mode}
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: teal
+      toggle: {icon: material/weather-sunny, name: Switch to light mode}
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - footnotes
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      base_path: ["."]          # so howto/commands.md can include the root POST_TRAINING.md
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+
+extra_javascript:
+  - https://unpkg.com/mermaid@11/dist/mermaid.min.js   # live hand-drawn mermaid in <details>
+
+nav:
+  - Home: README.md
+  - Theory & Pipeline:
+      - Data handling: 01_data_pipeline.md
+      - Pretraining: 02_pretraining.md
+      - SFT: 03_sft.md
+      - Reward Model: 04_reward_model.md
+      - DPO / ORPO / KTO: 05_dpo.md
+      - PPO: 06_ppo.md
+      - GRPO / RLVR: 07_grpo.md
+  - How-to:
+      - Configure (JSON): howto/configs.md
+      - Train (UI & CLI): howto/train.md
+      - The control-panel UI: howto/ui.md
+      - Evaluate: 08_evaluation.md
+      - Inference / Chat: 09_inference.md
+  - Reference:
+      - Command cheatsheet: howto/commands.md

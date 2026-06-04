@@ -1,0 +1,17 @@
+%%{init: {'look':'handDrawn','theme':'base','themeVariables':{'fontFamily':'Comic Sans MS, cursive'}}}%%
+flowchart LR
+    PR([GSM8K prompts]):::data --> RO[rollout<br/>generate_with_logprobs]:::proc
+    RO --> SC{score: verifier<br/>or reward model}:::rl
+    SC --> KL[+ per-token<br/>KL-to-ref penalty]:::rl
+    KL --> GAE[compute_gae<br/>advantages + returns]:::proc
+    GAE --> UP{{clipped update<br/>policy + value, K epochs}}:::model
+    UP -->|sync old policy| RO
+    REF{{frozen ref}}:::ckpt
+    REF -. KL .-> KL
+    VH{{value head}}:::model
+    VH -. value .-> GAE
+    classDef data fill:#d6ffd9,stroke:#27ae60,stroke-width:2px,color:#143d1a;
+    classDef proc fill:#d6e8ff,stroke:#2c6fbb,stroke-width:2px,color:#0d2c52;
+    classDef rl fill:#ffd9b3,stroke:#e67e22,stroke-width:2px,color:#6b3500;
+    classDef model fill:#ffe8a3,stroke:#d48806,stroke-width:2px,color:#5a3d00;
+    classDef ckpt fill:#eeeeee,stroke:#555,stroke-width:2px,color:#222;

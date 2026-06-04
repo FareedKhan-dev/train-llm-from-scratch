@@ -1,0 +1,13 @@
+%%{init: {'look':'handDrawn','theme':'base','themeVariables':{'fontFamily':'Comic Sans MS, cursive'}}}%%
+flowchart LR
+    CK[(any checkpoint)]:::ckpt --> LD[load_model_from_ckpt<br/>dims from stored cfg]:::proc
+    LD --> MODE{chat or raw?}:::proc
+    MODE -->|instruction model| CT[wrap in chat template]:::proc
+    MODE -->|base model| RAW[raw prefix]:::proc
+    CT --> GEN{{generate<br/>temperature / top-p / greedy}}:::model
+    RAW --> GEN
+    GEN --> DEC([decode → reply]):::eval
+    classDef ckpt fill:#eeeeee,stroke:#555,stroke-width:2px,color:#222;
+    classDef proc fill:#d6e8ff,stroke:#2c6fbb,stroke-width:2px,color:#0d2c52;
+    classDef model fill:#ffe8a3,stroke:#d48806,stroke-width:2px,color:#5a3d00;
+    classDef eval fill:#e8d6ff,stroke:#8e44ad,stroke-width:2px,color:#3d1a5a;

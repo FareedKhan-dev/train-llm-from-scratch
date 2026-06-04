@@ -1,0 +1,9 @@
+{
+  "iterations": 2,
+  "prompts_per_iter": 4,
+  "rollout_len": 32,
+  "ppo_epochs": 2,
+  "minibatch_size": 2,
+  "eval_every": 10000,
+  "save_every": 10000
+}

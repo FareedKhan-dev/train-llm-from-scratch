@@ -1,0 +1,21 @@
+{
+  "sft_ckpt": "/ephemeral/ckpts/sft.pt",
+  "prompt_path": "/ephemeral/data/rl_prompts_train.jsonl",
+  "eval_prompt_path": "/ephemeral/data/rl_prompts_test.jsonl",
+  "curriculum_path": "/ephemeral/data/arithmetic_prompts.jsonl",
+  "curriculum_iters": 100,
+  "out_ckpt": "/ephemeral/ckpts/grpo.pt",
+  "iterations": 1000,
+  "prompts_per_iter": 8,
+  "group_size": 8,
+  "rollout_len": 300,
+  "temperature": 1.0,
+  "top_p": 1.0,
+  "grpo_epochs": 1,
+  "clip": 0.2,
+  "kl_coef": 0.04,
+  "lr": 1e-06,
+  "grad_clip": 1.0,
+  "eval_every": 50,
+  "save_every": 100
+}

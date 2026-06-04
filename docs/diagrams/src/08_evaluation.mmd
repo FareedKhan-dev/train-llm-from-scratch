@@ -1,0 +1,12 @@
+%%{init: {'look':'handDrawn','theme':'base','themeVariables':{'fontFamily':'Comic Sans MS, cursive'}}}%%
+flowchart LR
+    CK[(stage checkpoint)]:::ckpt --> GEN[batched_generate<br/>greedy, length-bucketed]:::proc
+    Q([GSM8K question]):::data --> GEN
+    GEN --> EX[extract_answer<br/>answer / #### / last number]:::proc
+    EX --> CMP{== gold?}:::eval
+    GOLD([gold number]):::data --> CMP
+    CMP --> ACC[accuracy across<br/>Base→SFT→DPO→PPO→GRPO]:::eval
+    classDef ckpt fill:#eeeeee,stroke:#555,stroke-width:2px,color:#222;
+    classDef proc fill:#d6e8ff,stroke:#2c6fbb,stroke-width:2px,color:#0d2c52;
+    classDef data fill:#d6ffd9,stroke:#27ae60,stroke-width:2px,color:#143d1a;
+    classDef eval fill:#e8d6ff,stroke:#8e44ad,stroke-width:2px,color:#3d1a5a;

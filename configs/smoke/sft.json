@@ -1,0 +1,7 @@
+{
+  "max_steps": 10,
+  "batch_size": 4,
+  "eval_steps": 10000,
+  "warmup_steps": 2,
+  "save_every": 10000
+}

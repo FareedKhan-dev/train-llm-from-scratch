@@ -1,0 +1,15 @@
+%%{init: {'look':'handDrawn','theme':'base','themeVariables':{'fontFamily':'Comic Sans MS, cursive'}}}%%
+flowchart LR
+    H[(pile_train.h5)]:::store --> IT[get_batch_iterator<br/>random windows]:::proc
+    IT --> FWD{{forward<br/>bf16 autocast}}:::model
+    FWD --> L[cross-entropy loss]:::loss
+    L --> BWD[backward<br/>x grad_accum]:::model
+    BWD --> CL[clip grad norm 1.0]:::proc
+    CL --> ST[AdamW step<br/>cosine LR + warmup]:::model
+    ST -->|every 1000 steps| CK[(base_pretrained.pt)]:::ckpt
+    ST -->|next step| IT
+    classDef store fill:#cdece8,stroke:#16a085,stroke-width:2px,color:#0a3d33;
+    classDef proc fill:#d6e8ff,stroke:#2c6fbb,stroke-width:2px,color:#0d2c52;
+    classDef model fill:#ffe8a3,stroke:#d48806,stroke-width:2px,color:#5a3d00;
+    classDef loss fill:#ffd6d6,stroke:#c0392b,stroke-width:2px,color:#5c1212;
+    classDef ckpt fill:#eeeeee,stroke:#555,stroke-width:2px,color:#222;

@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "train-llm-from-scratch"
+version = "0.1.0"
+description = "Train an LLM from scratch in pure PyTorch — pretraining through SFT, Reward Modeling, PPO, DPO and GRPO/RLVR."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+# Core deps for the model + data path. (The teaching pretraining path also has
+# requirements.txt with cu118 wheels; this project install does not pin a CUDA build —
+# install the right torch wheel for your machine first if needed.)
+dependencies = [
+    "torch",
+    "numpy",
+    "h5py",
+    "tqdm",
+    "tiktoken",
+    "zstandard",
+    "requests",
+]
+
+[project.optional-dependencies]
+# Post-training extras (datasets + optional experiment logging).
+train = ["datasets", "wandb"]
+# The Streamlit control-panel UI.
+ui = ["streamlit", "pandas", "altair"]
+# The MkDocs Material documentation site.
+docs = ["mkdocs", "mkdocs-material", "pymdown-extensions"]
+# Everything, for development.
+all = ["datasets", "wandb", "streamlit", "pandas", "altair", "mkdocs", "mkdocs-material", "pymdown-extensions"]
+
+# Make the existing import roots installable so `pip install -e .` removes the need for
+# `PYTHONPATH=.`. These packages already exist in the repo (additive __init__.py only).
+[tool.setuptools]
+packages = ["config", "data_loader", "src", "src.models", "src.post_training", "src.post_training.rewards", "ui"]
+
+[tool.setuptools.package-data]
+# ship the JSON configs alongside the package
+"*" = ["*.json"]

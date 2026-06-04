@@ -1,0 +1,20 @@
+%%{init: {'look':'handDrawn','theme':'base','themeVariables':{'fontFamily':'Comic Sans MS, cursive'}}}%%
+flowchart TD
+    PILE([The Pile<br/>9.8B tokens]):::data --> PRE{{Pretrain<br/>~400M base}}:::model
+    PRE --> BASE[(base_pretrained.pt)]:::ckpt
+    BASE --> SFT{{SFT<br/>Alpaca · Dolly · GSM8K}}:::model
+    SFT --> SFTCK[(sft.pt)]:::ckpt
+    SFTCK --> RM{{Reward Model<br/>Bradley-Terry}}:::rl
+    SFTCK --> DPO{{DPO / ORPO / KTO<br/>preference}}:::rl
+    RM --> RMCK[(reward.pt)]:::ckpt
+    RMCK -->|reward signal| PPO{{PPO<br/>GAE + clip + KL}}:::rl
+    SFTCK --> PPO
+    SFTCK --> GRPO{{GRPO / RLVR<br/>group-relative}}:::rl
+    PPO --> EVAL([GSM8K eval<br/>+ chat / inference]):::eval
+    DPO --> EVAL
+    GRPO --> EVAL
+    classDef data fill:#d6ffd9,stroke:#27ae60,stroke-width:2px,color:#143d1a;
+    classDef model fill:#ffe8a3,stroke:#d48806,stroke-width:2px,color:#5a3d00;
+    classDef rl fill:#ffd9b3,stroke:#e67e22,stroke-width:2px,color:#6b3500;
+    classDef ckpt fill:#eeeeee,stroke:#555555,stroke-width:2px,color:#222;
+    classDef eval fill:#e8d6ff,stroke:#8e44ad,stroke-width:2px,color:#3d1a5a;

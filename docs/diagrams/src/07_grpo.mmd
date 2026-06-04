@@ -1,0 +1,16 @@
+%%{init: {'look':'handDrawn','theme':'base','themeVariables':{'fontFamily':'Comic Sans MS, cursive'}}}%%
+flowchart LR
+    PR([prompt]):::data --> G[sample a GROUP<br/>of G answers]:::proc
+    G --> V{verifier reward<br/>per answer}:::rl
+    V --> A[group advantage<br/>r - mean / std]:::proc
+    A --> L[clipped surrogate<br/>+ k3 KL to ref]:::loss
+    L --> UPD{{policy update}}:::model
+    UPD -->|next prompt| PR
+    REF{{frozen ref}}:::ckpt
+    REF -. KL .-> L
+    classDef data fill:#d6ffd9,stroke:#27ae60,stroke-width:2px,color:#143d1a;
+    classDef proc fill:#d6e8ff,stroke:#2c6fbb,stroke-width:2px,color:#0d2c52;
+    classDef rl fill:#ffd9b3,stroke:#e67e22,stroke-width:2px,color:#6b3500;
+    classDef loss fill:#ffd6d6,stroke:#c0392b,stroke-width:2px,color:#5c1212;
+    classDef model fill:#ffe8a3,stroke:#d48806,stroke-width:2px,color:#5a3d00;
+    classDef ckpt fill:#eeeeee,stroke:#555,stroke-width:2px,color:#222;

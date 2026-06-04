@@ -13,6 +13,13 @@
 
 I implemented a transformer model from scratch using PyTorch, based on the paper [Attention is All You Need](https://arxiv.org/abs/1706.03762). You can use my scripts to train your own **billion** or **million** parameter LLM using a single GPU.
 
+> **New: from-scratch post-training suite (SFT · Reward Model · PPO · DPO · GRPO/RLVR).**
+> The repo now goes beyond pretraining all the way to a modern aligned reasoning model —
+> `Base → SFT → Reward Model → {PPO, DPO} → GRPO` — every algorithm hand-written in pure
+> PyTorch (no `trl`/`peft`/`transformers`) on this repo's own `Transformer`, trained on real
+> public datasets (Alpaca, Dolly, Anthropic HH-RLHF, UltraFeedback, GSM8K) and built for
+> multi-GPU (DDP + bf16). See **[POST_TRAINING.md](POST_TRAINING.md)** for the full guide.
+
 Below is the output of the trained 13 million parameter LLM:
 
 ```
@@ -44,6 +51,7 @@ Odambinais is uncertain and fortune established in rural areas.
   - [Saving the Trained Model](#saving-the-trained-model)
   - [Training Loss](#training-loss)
   - [Generating Text](#generating-text)
+- [Post-Training & Alignment (SFT · RM · PPO · DPO · GRPO)](#post-training--alignment-sft--rm--ppo--dpo--grpo)
 - [What’s Next](#whats-next)
 
 ## Training Data Info
@@ -152,9 +160,20 @@ train-llm-from-scratch/
 │   ├── train/     # Contains training data
 │   └── val/       # Contains validation data
 ├── models/       # Directory where trained models are saved
+│
+│   # ── Post-training & tooling (added on top of the base; see POST_TRAINING.md / docs/) ──
+├── src/post_training/   # from-scratch SFT · reward model · PPO · DPO · GRPO + rollout/eval/inference
+├── configs/             # editable JSON configs: base.json + one per stage (+ smoke/)
+├── config/loader.py     # loads configs/*.json into the stage dataclasses (defaults < base < stage < CLI)
+├── ui/                  # Streamlit control panel: train · evaluate · chat (with theory) — `streamlit run ui/app.py`
+├── docs/                # Material for MkDocs site (theory + hand-drawn diagrams)
+├── mkdocs.yml           # docs-site config
+└── pyproject.toml       # `pip install -e .` (no more PYTHONPATH=.)
 ```
 
 `scripts/` directory contains scripts for downloading the dataset, preprocessing the data, training the model, and generating text using the trained model. `src/models/` directory contains the implementation of the transformer model, multi-layer perceptron (MLP), attention mechanisms, and transformer blocks.`config/` directory contains the configuration file with default parameters. `data_loader/` directory contains functions for creating data loaders/iterators.
+
+> **Beyond the base model:** `src/post_training/` adds the full alignment suite (SFT → reward model → PPO/DPO → GRPO), configured by editable JSON in `configs/`, with a beautiful Streamlit control panel (`ui/`) and a Material for MkDocs site (`docs/`). The original teaching files above are unchanged. See **[POST_TRAINING.md](POST_TRAINING.md)** and the [`docs/`](docs/README.md) site.
 
 ## Usage
 
@@ -1249,6 +1268,63 @@ print(m_output)  # Output from the Million model
 | Subject: ClickPaper-summary Study for Interview <br>Good morning, I hope this message finds you well, as the sun gently peeks through the clouds, ... |
 
 Our million parameter model gives us the motivation that we can have a very narrow, goal-oriented LLM under 1B in size, while our 1B trained model shows us that the architecture needs to be coded in great depth with proper consideration. Otherwise, it won’t improve training or performance compared to the million-parameter model. It will just overfit the data unless you have a deep architecture for the billion-sized model.
+
+## Post-Training & Alignment (SFT · RM · PPO · DPO · GRPO)
+
+Pretraining gives us a model that can *continue* text. But a base model can't follow instructions or
+reason — that takes **post-training**. So I extended the repo all the way to a modern aligned/reasoning
+model, with every algorithm written from scratch in plain PyTorch (no `trl`, `peft`, or `transformers`),
+trained on **real public datasets** (Alpaca, Dolly, Anthropic HH-RLHF, UltraFeedback, GSM8K), and built
+to run on a single GPU or scale across multiple GPUs with DDP + bf16.
+
+The full journey, `Base → SFT → Reward Model → {PPO, DPO} → GRPO → eval/chat`:
+
+![Post-training pipeline: Base to SFT to RM/DPO to PPO/GRPO](docs/diagrams/README.png)
+
+<details>
+<summary>Mermaid source (live, editable)</summary>
+
+```mermaid
+flowchart TD
+    PILE([The Pile<br/>9.8B tokens]):::data --> PRE{{Pretrain<br/>~400M base}}:::model
+    PRE --> BASE[(base_pretrained.pt)]:::ckpt
+    BASE --> SFT{{SFT<br/>Alpaca · Dolly · GSM8K}}:::model
+    SFT --> SFTCK[(sft.pt)]:::ckpt
+    SFTCK --> RM{{Reward Model<br/>Bradley-Terry}}:::rl
+    SFTCK --> DPO{{DPO / ORPO / KTO}}:::rl
+    RM --> RMCK[(reward.pt)]:::ckpt
+    RMCK -->|reward signal| PPO{{PPO<br/>GAE + clip + KL}}:::rl
+    SFTCK --> PPO
+    SFTCK --> GRPO{{GRPO / RLVR<br/>group-relative}}:::rl
+    PPO --> EVAL([GSM8K eval<br/>+ chat]):::eval
+    DPO --> EVAL
+    GRPO --> EVAL
+    classDef data fill:#d6ffd9,stroke:#27ae60,stroke-width:2px,color:#143d1a;
+    classDef model fill:#ffe8a3,stroke:#d48806,stroke-width:2px,color:#5a3d00;
+    classDef rl fill:#ffd9b3,stroke:#e67e22,stroke-width:2px,color:#6b3500;
+    classDef ckpt fill:#eeeeee,stroke:#555555,stroke-width:2px,color:#222;
+    classDef eval fill:#e8d6ff,stroke:#8e44ad,stroke-width:2px,color:#3d1a5a;
+```
+
+</details>
+
+Each stage has its own deep-dive doc — concept, the hand-drawn diagram, the real code, run commands, and
+what every metric means — under [`docs/`](docs/README.md):
+
+| Stage | What it teaches | Doc |
+|---|---|---|
+| Data handling | how every dataset is downloaded & preprocessed | [docs/01_data_pipeline.md](docs/01_data_pipeline.md) |
+| Pretraining | language (next-token on the Pile), DDP + bf16 | [docs/02_pretraining.md](docs/02_pretraining.md) |
+| SFT | instruction following + `<think>/<answer>` format | [docs/03_sft.md](docs/03_sft.md) |
+| Reward Model | scoring which answer humans prefer (Bradley-Terry) | [docs/04_reward_model.md](docs/04_reward_model.md) |
+| DPO / ORPO / KTO | preference alignment without an RL loop | [docs/05_dpo.md](docs/05_dpo.md) |
+| PPO | classic RLHF: rollout → reward → GAE → clip | [docs/06_ppo.md](docs/06_ppo.md) |
+| GRPO / RLVR | reasoning via verifiable rewards (DeepSeek-R1 style) | [docs/07_grpo.md](docs/07_grpo.md) |
+| Evaluation | GSM8K accuracy across all stages | [docs/08_evaluation.md](docs/08_evaluation.md) |
+| Inference / chat | talk to any checkpoint | [docs/09_inference.md](docs/09_inference.md) |
+
+Start at the [**Post-Training Overview**](docs/README.md), or see [POST_TRAINING.md](POST_TRAINING.md)
+for the condensed command reference. The whole chain runs with `bash scripts/run_posttraining.sh`.
 
 # What’s Next
 
