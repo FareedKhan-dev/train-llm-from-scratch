@@ -1,0 +1,15 @@
+%%{init: {'look':'handDrawn','theme':'base','themeVariables':{'fontFamily':'Comic Sans MS, cursive'}}}%%
+flowchart LR
+    P([preference pair<br/>prompt + chosen / rejected]):::data --> BB{{SFT backbone<br/>forward_hidden}}:::model
+    BB --> LT[take last real token]:::proc
+    LT --> RH[reward head<br/>Linear→1]:::model
+    RH --> RC([r_chosen]):::rl
+    RH --> RR([r_rejected]):::rl
+    RC --> BT[Bradley-Terry<br/>-log σ r_chosen - r_rejected]:::loss
+    RR --> BT
+    BT --> UPD[AdamW step]:::model
+    classDef data fill:#d6ffd9,stroke:#27ae60,stroke-width:2px,color:#143d1a;
+    classDef proc fill:#d6e8ff,stroke:#2c6fbb,stroke-width:2px,color:#0d2c52;
+    classDef model fill:#ffe8a3,stroke:#d48806,stroke-width:2px,color:#5a3d00;
+    classDef rl fill:#ffd9b3,stroke:#e67e22,stroke-width:2px,color:#6b3500;
+    classDef loss fill:#ffd6d6,stroke:#c0392b,stroke-width:2px,color:#5c1212;

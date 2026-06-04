@@ -1,0 +1,10 @@
+{
+  "iterations": 2,
+  "prompts_per_iter": 2,
+  "group_size": 4,
+  "rollout_len": 32,
+  "curriculum_iters": 1,
+  "grpo_epochs": 1,
+  "eval_every": 10000,
+  "save_every": 10000
+}

@@ -1,0 +1,14 @@
+%%{init: {'look':'handDrawn','theme':'base','themeVariables':{'fontFamily':'Comic Sans MS, cursive'}}}%%
+flowchart LR
+    P([chosen / rejected]):::data --> POL{{policy<br/>trainable}}:::model
+    P --> REF{{reference<br/>frozen SFT copy}}:::ckpt
+    POL --> LPP[seq log-probs<br/>π_chosen, π_rejected]:::proc
+    REF --> LPR[seq log-probs<br/>ref_chosen, ref_rejected]:::proc
+    LPP --> D[DPO loss<br/>-log σ β·Δlogratios]:::loss
+    LPR --> D
+    D --> UPD[AdamW step]:::model
+    classDef data fill:#d6ffd9,stroke:#27ae60,stroke-width:2px,color:#143d1a;
+    classDef proc fill:#d6e8ff,stroke:#2c6fbb,stroke-width:2px,color:#0d2c52;
+    classDef model fill:#ffe8a3,stroke:#d48806,stroke-width:2px,color:#5a3d00;
+    classDef ckpt fill:#eeeeee,stroke:#555,stroke-width:2px,color:#222;
+    classDef loss fill:#ffd6d6,stroke:#c0392b,stroke-width:2px,color:#5c1212;

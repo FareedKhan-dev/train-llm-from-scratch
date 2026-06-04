@@ -1,0 +1,17 @@
+{
+  "sft_ckpt": "/ephemeral/ckpts/sft.pt",
+  "pref_path": "/ephemeral/data/preferences.jsonl",
+  "out_ckpt": "/ephemeral/ckpts/dpo.pt",
+  "loss_type": "dpo",
+  "beta": 0.1,
+  "orpo_lambda": 1.0,
+  "batch_size": 8,
+  "epochs": 1,
+  "eval_steps": 200,
+  "warmup_steps": 50,
+  "lr": 5e-07,
+  "weight_decay": 0.0,
+  "grad_clip": 1.0,
+  "max_len": 768,
+  "save_every": 500
+}

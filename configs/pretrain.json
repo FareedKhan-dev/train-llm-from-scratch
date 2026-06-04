@@ -1,0 +1,16 @@
+{
+  "train_path": "/ephemeral/data/pile_train.h5",
+  "dev_path": "/ephemeral/data/pile_dev.h5",
+  "batch_size": 8,
+  "grad_accum": 12,
+  "train_steps": 50000,
+  "eval_steps": 1000,
+  "eval_iters": 100,
+  "warmup_steps": 2000,
+  "lr": 0.0003,
+  "min_lr": 3e-05,
+  "weight_decay": 0.1,
+  "grad_clip": 1.0,
+  "out_ckpt": "/ephemeral/ckpts/base_pretrained.pt",
+  "save_every": 1000
+}

@@ -1,0 +1,13 @@
+%%{init: {'look':'handDrawn','theme':'base','themeVariables':{'fontFamily':'Comic Sans MS, cursive'}}}%%
+flowchart LR
+    H[(sft_packed.h5<br/>tokens + loss_mask)]:::store --> B[batch:<br/>tokens, mask]:::proc
+    B --> M{{Transformer<br/>logits}}:::model
+    M --> SH[shift: predict t+1]:::proc
+    SH --> CE[token cross-entropy]:::loss
+    MASK([loss_mask = 1 on<br/>assistant tokens]):::data --> CE
+    CE --> AVG[average over<br/>masked tokens only]:::loss --> UPD[AdamW step]:::model
+    classDef store fill:#cdece8,stroke:#16a085,stroke-width:2px,color:#0a3d33;
+    classDef proc fill:#d6e8ff,stroke:#2c6fbb,stroke-width:2px,color:#0d2c52;
+    classDef data fill:#d6ffd9,stroke:#27ae60,stroke-width:2px,color:#143d1a;
+    classDef model fill:#ffe8a3,stroke:#d48806,stroke-width:2px,color:#5a3d00;
+    classDef loss fill:#ffd6d6,stroke:#c0392b,stroke-width:2px,color:#5c1212;

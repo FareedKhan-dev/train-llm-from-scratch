@@ -1,0 +1,16 @@
+{
+  "pretrained_ckpt": "/ephemeral/ckpts/base_pretrained.pt",
+  "data_path": "/ephemeral/data/sft_packed.h5",
+  "out_ckpt": "/ephemeral/ckpts/sft.pt",
+  "batch_size": 16,
+  "grad_accum": 2,
+  "epochs": 3,
+  "max_steps": -1,
+  "eval_steps": 200,
+  "warmup_steps": 100,
+  "lr": 1e-05,
+  "min_lr": 1e-06,
+  "weight_decay": 0.0,
+  "grad_clip": 1.0,
+  "save_every": 500
+}

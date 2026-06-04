@@ -1,0 +1,23 @@
+%%{init: {'look':'handDrawn','theme':'base','themeVariables':{'fontFamily':'Comic Sans MS, cursive'}}}%%
+flowchart TD
+    subgraph PT[" 1 · Pretraining "]
+      P1([Pile .jsonl.zst]):::data --> P2[stream-decompress<br/>+ tiktoken r50k_base]:::proc --> P3[(pile_train.h5<br/>flat tokens)]:::store
+    end
+    subgraph SF[" 2 · SFT "]
+      S1([Alpaca · Dolly · GSM8K]):::data --> S2[render chat template<br/>mask prompt tokens]:::proc --> S3[pack to 1024]:::proc --> S4[(sft_packed.h5<br/>tokens + loss_mask)]:::store
+    end
+    subgraph PF[" 3 · Preferences "]
+      F1([HH-RLHF · UltraFeedback]):::data --> F2[split prompt /<br/>chosen / rejected]:::proc --> F3[(preferences.jsonl)]:::store
+    end
+    subgraph RL[" 4 · RL prompts "]
+      R1([GSM8K · arithmetic]):::data --> R2[extract numeric<br/>gold answer]:::proc --> R3[(rl_prompts.jsonl<br/>prompt + gold)]:::store
+    end
+    P3 --> M1{{pretrain_base.py}}:::model
+    S4 --> M2{{train_sft.py}}:::model
+    F3 --> M3{{train_reward.py · train_dpo.py}}:::rl
+    R3 --> M4{{train_ppo.py · train_grpo.py}}:::rl
+    classDef data fill:#d6ffd9,stroke:#27ae60,stroke-width:2px,color:#143d1a;
+    classDef proc fill:#d6e8ff,stroke:#2c6fbb,stroke-width:2px,color:#0d2c52;
+    classDef store fill:#cdece8,stroke:#16a085,stroke-width:2px,color:#0a3d33;
+    classDef model fill:#ffe8a3,stroke:#d48806,stroke-width:2px,color:#5a3d00;
+    classDef rl fill:#ffd9b3,stroke:#e67e22,stroke-width:2px,color:#6b3500;

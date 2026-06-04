@@ -1,0 +1,35 @@
+name: docs
+
+# Build the MkDocs Material site and publish it to GitHub Pages (the gh-pages branch).
+# One-time setup after the first run: repo Settings -> Pages -> Source = "Deploy from a
+# branch" -> branch "gh-pages" / root.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "POST_TRAINING.md"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write          # mkdocs gh-deploy pushes to the gh-pages branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install docs dependencies
+        run: pip install mkdocs mkdocs-material pymdown-extensions
+      - name: Build (strict) and deploy to gh-pages
+        run: |
+          mkdocs build --strict      # fail fast on broken links / nav
+          mkdocs gh-deploy --force   # build + push to the gh-pages branch

@@ -53,6 +53,27 @@ class Transformer(nn.Module):
         pos_embedding = self.position_embed(self.pos_idxs[:T])
         return tok_embedding + pos_embedding
 
+    def forward_hidden(self, idx: torch.Tensor) -> torch.Tensor:
+        """
+        Run the backbone and return the final hidden states AFTER the final layer norm.
+
+        This is exactly the tensor that ``lm_head`` consumes, so it is the right
+        representation for auxiliary heads added during post-training (a scalar value
+        head for PPO, a scalar reward head for the reward model). Keeping it as a
+        separate method lets those heads reuse the backbone without duplicating the
+        forward logic or rewriting ``forward``.
+
+        Args:
+            idx (torch.Tensor): Input token indices, shape (B, T).
+
+        Returns:
+            torch.Tensor: Final hidden states, shape (B, T, n_embed).
+        """
+        x = self._pre_attn_pass(idx)
+        for block in self.attn_blocks:
+            x = block(x)
+        return self.layer_norm(x)
+
     def forward(self, idx: torch.Tensor, targets: torch.Tensor = None) -> tuple[torch.Tensor, torch.Tensor | None]:
         """
         Forward pass through the Transformer.
@@ -64,10 +85,7 @@ class Transformer(nn.Module):
         Returns:
             tuple: Logits and loss (if targets are provided).
         """
-        x = self._pre_attn_pass(idx)
-        for block in self.attn_blocks:
-            x = block(x)
-        x = self.layer_norm(x)
+        x = self.forward_hidden(idx)
         logits = self.lm_head(x)
         loss = None
         if targets is not None:
