@@ -994,7 +994,7 @@ print(f"Total number of parameters in the model: {total_params:,}")
 
 
 #### OUTPUT ####
-2,409,912,779
+2,141,346,251
 ```
 
 Now that we have 2 Billion parameter model, we need to define our Adam optimizer and loss tracking function, which will help us track the progress of our model throughout the training.
