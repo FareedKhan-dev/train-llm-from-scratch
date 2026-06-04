@@ -24,6 +24,11 @@ T_LR = 5e-4                # Initial learning rate for training
 T_LR_DECAYED = 5e-5        # Learning rate after decay
 T_OUT_PATH = "models/transformer_B.pt"  # Path to save the trained model
 
+# Checkpoint configuration
+SAVE_EVERY = 1000             # Save a checkpoint every N steps (0 = only at end)
+CHECKPOINT_DIR = "checkpoints"  # Directory for periodic checkpoints
+KEEP_LAST_N = 3               # Keep only the N most recent checkpoints (-1 = keep all)
+
 # Device configuration
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -45,5 +50,8 @@ default_config = {
     't_lr': T_LR,
     't_lr_decayed': T_LR_DECAYED,
     't_out_path': T_OUT_PATH,
+    'save_every': SAVE_EVERY,
+    'checkpoint_dir': CHECKPOINT_DIR,
+    'keep_last_n': KEEP_LAST_N,
     'device': DEVICE,
 }

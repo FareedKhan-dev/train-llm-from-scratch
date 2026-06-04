@@ -1,6 +1,8 @@
 import torch
 import torch.nn.functional as F
 import os
+import argparse
+import glob
 import time
 from tqdm import tqdm
 import numpy as np
@@ -130,6 +132,127 @@ def estimate_loss(steps: int) -> Dict[str, float]:
     model.train()  # Restore the model to training mode.
     return out
 
+# --- Checkpoint Helpers ---
+
+def find_latest_checkpoint(checkpoint_dir: str) -> str | None:
+    """Return the path of the most recent checkpoint by step number, or None."""
+    pattern = os.path.join(checkpoint_dir, "checkpoint_step_*.pt")
+    matches = glob.glob(pattern)
+    if not matches:
+        return None
+    # Filenames are "checkpoint_step_00042.pt" — sort by embedded step number.
+    matches.sort(key=lambda p: int(os.path.splitext(os.path.basename(p))[0].rsplit('_', 1)[-1]))
+    return matches[-1]
+
+
+def save_checkpoint(
+    step: int,
+    model: torch.nn.Module,
+    optimizer: torch.optim.Optimizer,
+    losses: list,
+    checkpoint_dir: str,
+    keep_last_n: int = -1,
+) -> str:
+    """Save model, optimizer, losses, and RNG state to a numbered checkpoint file.
+
+    Returns the path of the newly written checkpoint.
+    """
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    ckpt_path = os.path.join(checkpoint_dir, f"checkpoint_step_{step:05d}.pt")
+
+    torch.save(
+        {
+            'step': step,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'losses': losses,
+            'rng_state': torch.get_rng_state(),
+            'cuda_rng_state': torch.cuda.get_rng_state() if torch.cuda.is_available() else None,
+            'numpy_rng_state': np.random.get_state(),
+            'config': {
+                k: v for k, v in config.items()
+                if isinstance(v, (int, float, str, bool, type(None)))
+            },
+        },
+        ckpt_path,
+    )
+
+    # Rotate old checkpoints: keep only the N most recent.
+    if keep_last_n > 0:
+        all_ckpts = sorted(
+            glob.glob(os.path.join(checkpoint_dir, "checkpoint_step_*.pt")),
+            key=lambda p: int(os.path.splitext(os.path.basename(p))[0].rsplit('_', 1)[-1]),
+        )
+        while len(all_ckpts) > keep_last_n:
+            old = all_ckpts.pop(0)
+            os.remove(old)
+            print(f"  (removed old checkpoint: {os.path.basename(old)})")
+
+    return ckpt_path
+
+
+def load_checkpoint(ckpt_path: str, model, optimizer, device: str) -> tuple:
+    """Restore model, optimizer, losses, and RNG from a checkpoint.
+
+    Returns (step, losses, info_dict).
+    """
+    print(f"Resuming from checkpoint: {ckpt_path}")
+    ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
+
+    model.load_state_dict(ckpt['model_state_dict'])
+    optimizer.load_state_dict(ckpt['optimizer_state_dict'])
+    losses = ckpt.get('losses', [])
+    step = ckpt['step']
+
+    # Restore RNG for reproducibility.
+    if 'rng_state' in ckpt:
+        torch.set_rng_state(ckpt['rng_state'])
+    if ckpt.get('cuda_rng_state') is not None and torch.cuda.is_available():
+        torch.cuda.set_rng_state(ckpt['cuda_rng_state'])
+    if 'numpy_rng_state' in ckpt:
+        np.random.set_state(ckpt['numpy_rng_state'])
+
+    info = {
+        'saved_step': step,
+        'saved_loss': losses[-1] if losses else None,
+        'num_losses': len(losses),
+        'saved_config': ckpt.get('config', {}),
+    }
+    return step, losses, info
+
+
+# --- CLI ---
+
+parser = argparse.ArgumentParser(description='Train a Transformer from scratch.')
+parser.add_argument(
+    '--resume', action='store_true',
+    help='Resume training from the latest checkpoint in the checkpoint directory.',
+)
+parser.add_argument(
+    '--resume-from', type=str, default=None, metavar='PATH',
+    help='Resume training from a specific checkpoint file.',
+)
+args = parser.parse_args()
+
+# --- Resume / Start State ---
+
+start_step = 0
+checkpoint_dir = config.get('checkpoint_dir', 'checkpoints')
+
+if args.resume or args.resume_from:
+    ckpt_path = args.resume_from if args.resume_from else find_latest_checkpoint(checkpoint_dir)
+    if ckpt_path is None:
+        print("No checkpoint found in", checkpoint_dir, "— starting fresh.")
+    else:
+        start_step, losses, resume_info = load_checkpoint(
+            ckpt_path, model, optimizer, config['device']
+        )
+        start_step += 1  # Resume from the *next* step.
+        print(f"Resumed at step {start_step} / {config['t_train_steps']}")
+        if resume_info['saved_loss'] is not None:
+            print(f"  Saved loss at resume point: {resume_info['saved_loss']:.4f}")
+        print(f"  Losses carried forward: {resume_info['num_losses']} entries")
+
 # --- Training Loop ---
 
 # Create a batch iterator for the training data.
@@ -145,8 +268,12 @@ tokens_per_step = config['t_batch_size'] * config['t_context_length']
 last_eval_time = time.perf_counter()
 
 # Create a progress bar to monitor training progress.
-pbar = tqdm(range(config['t_train_steps']))
+# When resuming, start the bar at the correct offset.
+total_steps = config['t_train_steps']
+pbar = tqdm(range(total_steps), initial=start_step)
 for step in pbar:
+    if step < start_step:
+        continue  # skip steps already completed in the resumed checkpoint
     try:
         # Fetch a batch of input and target data (and start the step timer).
         step_start_time = time.perf_counter()
@@ -167,6 +294,15 @@ for step in pbar:
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 
         optimizer.step()
+
+        # Periodic checkpoint saving.
+        save_every = config.get('save_every', 0)
+        if save_every > 0 and step > 0 and step % save_every == 0:
+            ckpt_path = save_checkpoint(
+                step, model, optimizer, losses, checkpoint_dir,
+                keep_last_n=config.get('keep_last_n', -1),
+            )
+            print(f"Checkpoint saved: {ckpt_path} (step {step})")
 
         # Measure step time and instantaneous throughput for diagnostics.
         step_time = time.perf_counter() - step_start_time
@@ -233,5 +369,11 @@ torch.save(
     modified_model_out_path
 )
 print(f"Saved model to {modified_model_out_path}")
+
+# Also save a final checkpoint so `--resume` works for post-hoc fine-tuning.
+save_checkpoint(
+    config['t_train_steps'], model, optimizer, losses, checkpoint_dir,
+    keep_last_n=config.get('keep_last_n', -1),
+)
 print(get_peak_memory_report(config['device']))
 print(f"Finished training. Train loss: {train_loss:.4f}, Dev loss: {dev_loss:.4f}")
