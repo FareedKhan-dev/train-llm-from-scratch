@@ -635,7 +635,7 @@ class MultiHeadAttention(nn.Module):
     Multi-Head Attention module.
 
     This module combines multiple attention heads in parallel. The outputs of each head
-    are concatenated to form the final output.
+    are concatenated and passed through a final linear projection to form the output.
     """
     def __init__(self, n_head, n_embed, context_length):
         super().__init__()
@@ -650,7 +650,7 @@ class MultiHeadAttention(nn.Module):
             x (torch.Tensor): Input tensor of shape (B, T, C).
 
         Returns:
-            torch.Tensor: Output tensor after concatenating the outputs of all heads.
+            torch.Tensor: Output tensor after concatenating the heads and applying the output projection.
         """
         # Concatenate the output of each head along the last dimension (C)
         x = torch.cat([h(x) for h in self.heads], dim=-1)
@@ -978,7 +978,7 @@ print(f"Total number of parameters in the model: {total_params:,}")
 
 
 #### OUTPUT ####
-2,141,346,251
+2,409,912,779
 ```
 
 Now that we have 2 Billion parameter model, we need to define our Adam optimizer and loss tracking function, which will help us track the progress of our model throughout the training.
@@ -1069,6 +1069,10 @@ for step in pbar:
       # Backpropagate the loss and update the model parameters.
       optimizer.zero_grad(set_to_none=True)
       loss.backward()
+
+      # Clip gradients to prevent exploding gradients.
+      torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+
       optimizer.step()
 
       # Periodically evaluate the model on training and development data.

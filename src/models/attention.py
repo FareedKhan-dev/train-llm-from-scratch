@@ -62,7 +62,7 @@ class MultiHeadAttention(nn.Module):
     Multi-Head Attention module.
 
     This module combines multiple attention heads in parallel. The outputs of each head
-    are concatenated to form the final output.
+    are concatenated and passed through a final linear projection to form the output.
 
     Args:
         n_head (int): The number of parallel attention heads.
@@ -90,7 +90,7 @@ class MultiHeadAttention(nn.Module):
             x (torch.Tensor): Input tensor of shape (B, T, C).
 
         Returns:
-            torch.Tensor: Output tensor after concatenating the outputs of all heads.
+            torch.Tensor: Output tensor after concatenating the heads and applying the output projection.
         """
         # Concatenate the output of each head along the last dimension (C)
         x = torch.cat([h(x) for h in self.heads], dim=-1)
