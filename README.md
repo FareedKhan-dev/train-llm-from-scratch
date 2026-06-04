@@ -96,6 +96,7 @@ You will need a GPU to train your model. Colab or Kaggle T4 will work for traini
 | NVIDIA RTX 4070 Ti       | 12 GB  | Medium    | ✘               | ✔                | ~1.5B                             |
 | NVIDIA RTX 4080          | 16 GB  | Medium    | ✘               | ✔                | ~2B                               |
 | NVIDIA RTX 4090          | 24 GB  | Large     | ✔               | ✔                | ~4B                               |
+| NVIDIA RTX 5090          | 32 GB* | Large     | ✔*              | ✔                | 13M verified; larger configs TBD* |
 | NVIDIA RTX 4060 Ti       | 8 GB   | Small     | ✘               | ✔                | ~1B                               |
 | NVIDIA RTX 4060          | 8 GB   | Small     | ✘               | ✔                | ~1B                               |
 | NVIDIA RTX 4050          | 6 GB   | Small     | ✘               | ✔                | ~0.75B                            |
@@ -111,6 +112,21 @@ You will need a GPU to train your model. Colab or Kaggle T4 will work for traini
 | AMD RX 7600              | 8 GB   | Small     | ✘               | ✔                | ~1B                               |
 
 The 13M LLM training is the training of a 13+ million-parameter model, and the 2B LLM training is the training of a 2+ billion-parameter model. The data size is categorized as small, medium, and large. The small data size is around 1 GB, the medium data size is around 5 GB, and the large data size is around 10 GB.
+
+* Community validation on an NVIDIA GeForce RTX 5090 has confirmed that the official README flow works for the 13M configuration using PyTorch 2.11.0+cu128 and CUDA 12.8. In one successful run, the 13M model trained to completion, wrote a checkpoint, and the generated checkpoint was successfully loaded for text generation. Practical limits for larger configurations still depend on training dtype, batch size, context length, optimizer state, and any memory-saving techniques used.
+
+### Community-tested modern GPU notes
+
+A community run on an NVIDIA GeForce RTX 5090 validated the following:
+- official dataset download and preprocessing flow completed successfully
+- the README-recommended 13M configuration trained successfully to completion
+- checkpoint saving and text generation both worked
+- PyTorch version: 2.11.0+cu128
+- CUDA version: 12.8
+- PyTorch-reported peak VRAM during 13M training stayed around 0.60 GiB allocated / 0.67 GiB reserved
+- observed training throughput during eval intervals was typically in the tens of thousands of tokens/sec on this small config
+
+The training script now prints lightweight runtime diagnostics to make these reports easier to collect. Newer PyTorch versions may also require explicit checkpoint loading compatibility handling during generation.
 
 ## Code Structure
 

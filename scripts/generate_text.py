@@ -4,6 +4,13 @@ import argparse
 from config.config import default_config as config
 from src.models.transformer import Transformer  # Assuming your Transformer class is in this module
 
+
+def load_checkpoint(model_path: str, device: str):
+    try:
+        return torch.load(model_path, map_location=torch.device(device), weights_only=False)
+    except TypeError:
+        return torch.load(model_path, map_location=torch.device(device))
+
 def generate_text(model_path: str, input_text: str, max_new_tokens: int = 100, device: str = 'cuda') -> str:
     """
     Generates text using a pre-trained Transformer model.
@@ -18,7 +25,7 @@ def generate_text(model_path: str, input_text: str, max_new_tokens: int = 100, d
         str: The generated text.
     """
     # Load the model checkpoint
-    checkpoint = torch.load(model_path, map_location=torch.device(device))
+    checkpoint = load_checkpoint(model_path, device)
 
     # Initialize the model using the configuration from config.py
     model = Transformer(

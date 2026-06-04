@@ -1,5 +1,7 @@
 # --- Configuration ---
 
+import torch
+
 # Define vocabulary size and transformer configuration (3 Billion)
 VOCAB_SIZE = 50304          # Number of unique tokens in the vocabulary
 CONTEXT_LENGTH = 512        # Maximum sequence length for the model
@@ -23,7 +25,7 @@ T_LR_DECAYED = 5e-5        # Learning rate after decay
 T_OUT_PATH = "models/transformer_B.pt"  # Path to save the trained model
 
 # Device configuration
-DEVICE = 'cuda'
+DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # Store all configurations in a dictionary for easy access and modification
 default_config = {
