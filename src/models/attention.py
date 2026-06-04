@@ -80,6 +80,7 @@ class MultiHeadAttention(nn.Module):
         """
         super().__init__()
         self.heads = nn.ModuleList([Head(n_embed // n_head, n_embed, context_length) for _ in range(n_head)])
+        self.proj = nn.Linear(n_embed, n_embed)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -93,6 +94,8 @@ class MultiHeadAttention(nn.Module):
         """
         # Concatenate the output of each head along the last dimension (C)
         x = torch.cat([h(x) for h in self.heads], dim=-1)
+        # Apply final linear projection
+        x = self.proj(x)
         return x
 
 if __name__ == '__main__':
