@@ -6,6 +6,10 @@ nudge the policy toward higher-reward behaviour using Proximal Policy Optimizati
 network (critic) for variance reduction and a KL penalty to keep it from drifting too far from the SFT
 model. I wrote the whole loop from scratch: rollout → reward → GAE advantages → clipped update.
 
+The clipped objective and policy-ratio notation are introduced in
+[Objectives, Losses & Perplexity](foundations/objectives.md). The optimizer and stability pieces are
+covered in [Optimization & Training Systems](foundations/optimization.md).
+
 ![PPO loop](diagrams/06_ppo.png)
 
 <details>

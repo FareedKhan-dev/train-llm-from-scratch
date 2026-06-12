@@ -6,6 +6,9 @@ Training is only satisfying if you can actually *talk* to the result. The origin
 hard-wired to the legacy config and has no chat template — so I added a small inference layer that loads
 **any** stage checkpoint (base / SFT / DPO / PPO / GRPO) and talks to it correctly.
 
+For the underlying decoding loop, context cropping, temperature, and stop-token behavior, read
+[Generation & Sampling](foundations/generation.md).
+
 ![Inference / chat flow](diagrams/09_inference.png)
 
 <details>

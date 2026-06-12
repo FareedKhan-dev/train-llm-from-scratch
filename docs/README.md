@@ -7,6 +7,32 @@ through the whole journey I built on top of the base model — every stage writt
 in plain PyTorch (no `trl`, no `peft`, no `transformers`), trained on real public datasets, and
 runnable on a single GPU or scaled across multiple GPUs with DDP.
 
+If you are new to LLM training internals, start with the new
+**[LLM Foundations](foundations/README.md)** section before reading the stage pages. It explains the
+token shapes, decoder-only Transformer, attention masks, objectives, optimization loop, and generation
+mechanics that every later page relies on.
+
+## Recommended reading order
+
+1. **Foundations first**:
+   [Tokenization](foundations/tokenization.md) ->
+   [Transformer](foundations/transformer.md) ->
+   [Attention](foundations/attention.md) ->
+   [Objectives](foundations/objectives.md) ->
+   [Optimization](foundations/optimization.md) ->
+   [Generation](foundations/generation.md).
+2. **Then the full pipeline**:
+   [Data](01_data_pipeline.md) ->
+   [Pretraining](02_pretraining.md) ->
+   [SFT](03_sft.md) ->
+   [Reward Model](04_reward_model.md) ->
+   [DPO](05_dpo.md) ->
+   [PPO](06_ppo.md) ->
+   [GRPO](07_grpo.md).
+3. **Finally run and inspect**:
+   [Evaluation](08_evaluation.md), [Inference / Chat](09_inference.md), and the
+   [command cheatsheet](howto/commands.md).
+
 The pipeline mirrors how modern aligned/reasoning models are actually built:
 
 ![Post-training pipeline](diagrams/00_overview.png)

@@ -6,6 +6,9 @@ simple: **throw away PPO's value network**. For each prompt, sample a whole *gro
 them with a verifiable reward, and use the group's own mean/std as the baseline. The advantage is just
 "how much better than your groupmates was this answer?" — no critic to train, no value loss.
 
+For the group-relative advantage formula and how it relates to PPO-style policy ratios, see
+[Objectives, Losses & Perplexity](foundations/objectives.md).
+
 ![GRPO loop](diagrams/07_grpo.png)
 
 <details>

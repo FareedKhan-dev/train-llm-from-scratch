@@ -6,6 +6,10 @@ showing it thousands of `(instruction, response)` pairs and training it to produ
 The only real difference from pretraining is a per-token **loss mask**: we compute the loss on the
 assistant tokens and ignore the prompt.
 
+The exact token/mask mechanics are explained in
+[Tokenization & Data Shapes](foundations/tokenization.md), and the masked objective is derived in
+[Objectives, Losses & Perplexity](foundations/objectives.md).
+
 ![SFT masked-loss flow](diagrams/03_sft.png)
 
 <details>

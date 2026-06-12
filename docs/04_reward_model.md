@@ -6,6 +6,10 @@ preferred. That's the reward model. I build it by putting a tiny scalar head on 
 backbone and training it on human preference pairs with the **Bradley-Terry** loss — the same recipe
 as InstructGPT.
 
+This page assumes you already know how the backbone produces hidden states. If not, start with
+[Decoder-Only Transformer](foundations/transformer.md). The preference-data shape is covered in
+[Tokenization & Data Shapes](foundations/tokenization.md).
+
 ![Reward model (Bradley-Terry)](diagrams/04_reward_model.png)
 
 <details>
