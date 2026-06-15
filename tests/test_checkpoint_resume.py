@@ -7,6 +7,7 @@ Run from the repo root:
 
 from __future__ import annotations
 
+import os
 import tempfile
 
 import torch
@@ -53,6 +54,7 @@ def test_checkpoint_round_trip_and_latest_resume():
         second = checkpoint_path(tmp, 3)
         save_training_checkpoint(first, model, optimizer, cfg, losses, step=2)
         save_training_checkpoint(second, model, optimizer, cfg, losses + [0.5], step=3)
+        assert not [name for name in os.listdir(tmp) if ".tmp-" in name]
         prune_old_checkpoints(tmp, keep_last=1)
 
         remaining = list_checkpoints(tmp)
