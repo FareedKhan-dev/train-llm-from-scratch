@@ -188,12 +188,13 @@ def save_training_checkpoint(
         },
     }
     target_dir = os.path.dirname(path) or "."
-    fd, tmp_path = tempfile.mkstemp(
+    with tempfile.NamedTemporaryFile(
         dir=target_dir,
         prefix=f".{os.path.basename(path)}.",
         suffix=".tmp",
-    )
-    os.close(fd)
+        delete=False,
+    ) as tmp_file:
+        tmp_path = tmp_file.name
     try:
         torch.save(payload, tmp_path)
         os.replace(tmp_path, path)
