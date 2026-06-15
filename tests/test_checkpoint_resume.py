@@ -8,6 +8,8 @@ Run from the repo root:
 from __future__ import annotations
 
 import tempfile
+import os
+from unittest import mock
 
 import torch
 
@@ -76,6 +78,25 @@ def test_checkpoint_round_trip_and_latest_resume():
             assert torch.allclose(original, loaded)
 
 
+def test_checkpoint_save_failure_does_not_leave_partial_file():
+    cfg = _tiny_config()
+    model = _tiny_model()
+    optimizer = torch.optim.AdamW(model.parameters(), lr=cfg["t_lr"])
+
+    with tempfile.TemporaryDirectory() as tmp:
+        target = checkpoint_path(tmp, 7)
+        with mock.patch("scripts.train_transformer.torch.save", side_effect=RuntimeError("boom")):
+            try:
+                save_training_checkpoint(target, model, optimizer, cfg, [1.0], step=7)
+                assert False, "save_training_checkpoint should re-raise save errors"
+            except RuntimeError:
+                pass
+
+        assert not os.path.exists(target)
+        assert not [name for name in os.listdir(tmp) if name.endswith(".tmp")]
+
+
 if __name__ == "__main__":
     test_checkpoint_round_trip_and_latest_resume()
+    test_checkpoint_save_failure_does_not_leave_partial_file()
     print("ALL CHECKPOINT RESUME TESTS PASSED")
