@@ -27,6 +27,14 @@ T_CHECKPOINT_STEPS = 0      # Save periodic checkpoints every N steps (0 disable
 T_KEEP_LAST_CHECKPOINTS = 3 # Number of periodic checkpoints to keep (0 keeps all)
 T_CHECKPOINT_DIR = None     # Optional checkpoint directory override
 
+# Memory-optimisation knobs (all OFF by default => unchanged behaviour/numerics).
+# These let large configs fit in less VRAM; enable them on the CLI or here. See issue #5.
+USE_AMP = False                 # bf16/fp16 autocast (CUDA only; ignored on CPU)
+AMP_DTYPE = "bf16"              # "bf16" (no GradScaler) or "fp16" (GradScaler)
+USE_GRADIENT_CHECKPOINTING = False  # recompute block activations in backward to save VRAM
+GRAD_ACCUM_STEPS = 1           # micro-batches per optimizer step (effective batch x N)
+REPORT_MEMORY_BUDGET = False   # print a rough VRAM budget before training (CUDA only)
+
 # Device configuration
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -51,5 +59,10 @@ default_config = {
     't_checkpoint_steps': T_CHECKPOINT_STEPS,
     't_keep_last_checkpoints': T_KEEP_LAST_CHECKPOINTS,
     't_checkpoint_dir': T_CHECKPOINT_DIR,
+    'use_amp': USE_AMP,
+    'amp_dtype': AMP_DTYPE,
+    'use_gradient_checkpointing': USE_GRADIENT_CHECKPOINTING,
+    'grad_accum_steps': GRAD_ACCUM_STEPS,
+    'report_memory_budget': REPORT_MEMORY_BUDGET,
     'device': DEVICE,
 }

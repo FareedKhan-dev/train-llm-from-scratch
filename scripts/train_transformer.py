@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import re
 import sys
@@ -66,6 +67,28 @@ def get_peak_memory_report(device: str) -> str:
             f"Peak VRAM reserved: {peak_reserved:.2f} GiB"
         )
     return "Peak VRAM allocated: N/A | Peak VRAM reserved: N/A"
+
+
+def estimate_memory_budget(num_params: int, device: str, use_amp: bool) -> str:
+    """
+    Print a rough training VRAM budget so users can predict OOM before launching.
+
+    AdamW keeps fp32 weights + grads + two moment buffers (~16 bytes/param). This is an
+    estimate of optimizer/parameter state only (activations depend on batch/context and
+    are reduced a lot by gradient checkpointing). CUDA-only; returns N/A otherwise.
+    """
+    if not (device.startswith("cuda") and torch.cuda.is_available()):
+        return "VRAM budget: N/A (no CUDA device)"
+    # weights(4) + grad(4) + Adam m(4) + Adam v(4); AMP adds bf16/fp16 copies but keeps
+    # the fp32 master state, so ~16 B/param is a reasonable floor either way.
+    state_gib = bytes_to_gib(num_params * 16)
+    props = torch.cuda.get_device_properties(torch.cuda.current_device())
+    total_gib = bytes_to_gib(props.total_memory)
+    note = " (+ activations; reduce with --grad-checkpointing / --grad-accum)"
+    return (
+        f"VRAM budget: ~{state_gib:.2f} GiB params+optimizer state vs {total_gib:.2f} GiB "
+        f"total on {torch.cuda.get_device_name()}{note}"
+    )
 
 
 # --- Checkpoint Helpers ---
@@ -352,6 +375,41 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Keep only the most recent N periodic checkpoints. 0 keeps all.",
     )
+    # --- Memory-optimisation flags (opt-in; all default to the config values, which are OFF) ---
+    parser.add_argument(
+        "--amp",
+        dest="amp",
+        action="store_true",
+        default=None,
+        help="Enable bf16/fp16 mixed-precision autocast (CUDA only; ignored on CPU).",
+    )
+    parser.add_argument(
+        "--amp-dtype",
+        type=str,
+        choices=["bf16", "fp16"],
+        default=None,
+        help="Autocast dtype when --amp is set: bf16 (default, no GradScaler) or fp16.",
+    )
+    parser.add_argument(
+        "--grad-checkpointing",
+        dest="grad_checkpointing",
+        action="store_true",
+        default=None,
+        help="Recompute transformer-block activations in backward to save VRAM.",
+    )
+    parser.add_argument(
+        "--grad-accum",
+        type=int,
+        default=None,
+        help="Accumulate gradients over N micro-batches per optimizer step (effective batch xN).",
+    )
+    parser.add_argument(
+        "--report-memory",
+        dest="report_memory",
+        action="store_true",
+        default=None,
+        help="Print a rough VRAM budget (params + optimizer state) before training (CUDA only).",
+    )
     return parser.parse_args()
 
 
@@ -374,6 +432,36 @@ def main() -> None:
         or default_checkpoint_dir(train_config['t_out_path'])
     )
 
+    # --- Resolve memory-optimisation options (CLI overrides config; all default OFF) ---
+    use_amp = args.amp if args.amp is not None else bool(train_config.get('use_amp', False))
+    amp_dtype_name = args.amp_dtype or train_config.get('amp_dtype', 'bf16')
+    use_grad_ckpt = (
+        args.grad_checkpointing if args.grad_checkpointing is not None
+        else bool(train_config.get('use_gradient_checkpointing', False))
+    )
+    grad_accum = max(1, args.grad_accum if args.grad_accum is not None
+                     else int(train_config.get('grad_accum_steps', 1)))
+    report_memory = (
+        args.report_memory if args.report_memory is not None
+        else bool(train_config.get('report_memory_budget', False))
+    )
+
+    device_is_cuda = train_config['device'].startswith('cuda') and torch.cuda.is_available()
+    if use_amp and not device_is_cuda:
+        print("[mem-opt] --amp requested but no CUDA device available; disabling AMP.")
+        use_amp = False
+    amp_dtype = torch.bfloat16 if amp_dtype_name == 'bf16' else torch.float16
+
+    def autocast_ctx():
+        if use_amp:
+            return torch.autocast(device_type='cuda', dtype=amp_dtype)
+        return contextlib.nullcontext()
+
+    # GradScaler is only needed for fp16; bf16 has enough range. A disabled scaler is a no-op,
+    # so the scale/unscale_/step/update calls below work unchanged for bf16 and CPU.
+    use_scaler = use_amp and amp_dtype == torch.float16
+    scaler = torch.amp.GradScaler('cuda', enabled=use_scaler)
+
     # --- Initialize the Model and Print Parameters ---
 
     # Print runtime/device diagnostics and reset GPU peak-memory stats before training.
@@ -392,6 +480,17 @@ def main() -> None:
     # Print the total number of parameters.
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Total number of parameters in the model: {total_params:,}")
+
+    # Apply opt-in memory optimisations.
+    model.gradient_checkpointing = use_grad_ckpt
+    if report_memory:
+        print(estimate_memory_budget(total_params, train_config['device'], use_amp))
+    if use_amp or use_grad_ckpt or grad_accum > 1:
+        print(
+            f"[mem-opt] amp={use_amp}"
+            f"{'(' + amp_dtype_name + ')' if use_amp else ''} "
+            f"grad_checkpointing={use_grad_ckpt} grad_accum={grad_accum}"
+        )
 
     # --- Optimizer Setup and Loss Tracking ---
 
@@ -428,8 +527,8 @@ def main() -> None:
         device=train_config['device'],
     )
 
-    # Number of tokens processed per step (batch_size * context_length), used for throughput.
-    tokens_per_step = train_config['t_batch_size'] * train_config['t_context_length']
+    # Number of tokens processed per optimizer step (batch * context * grad_accum), for throughput.
+    tokens_per_step = train_config['t_batch_size'] * train_config['t_context_length'] * grad_accum
     last_eval_time = time.perf_counter()
     latest_train_loss = None
     latest_dev_loss = None
@@ -438,25 +537,31 @@ def main() -> None:
     pbar = tqdm(range(start_step, train_config['t_train_steps']))
     for step in pbar:
         try:
-            # Fetch a batch of input and target data (and start the step timer).
+            # Start the step timer.
             step_start_time = time.perf_counter()
-            xb, yb = next(batch_iterator)
 
-            # Perform a forward pass and compute the loss.
-            _, loss = model(xb, yb)
+            # Accumulate gradients over `grad_accum` micro-batches (==1 => original behaviour).
+            optimizer.zero_grad(set_to_none=True)
+            step_loss = 0.0
+            for _ in range(grad_accum):
+                xb, yb = next(batch_iterator)
+                with autocast_ctx():
+                    _, loss = model(xb, yb)
+                    # Scale so the accumulated gradient equals the full-batch mean gradient.
+                    loss = loss / grad_accum
+                scaler.scale(loss).backward()
+                step_loss += float(loss.item())
 
-            # Record the loss for tracking.
-            losses.append(float(loss.item()))
+            # Record the (accumulated) loss for tracking.
+            losses.append(step_loss)
             pbar.set_description(f"Train loss: {np.mean(losses[-avg_window:]):.4f}")
 
-            # Backpropagate the loss and update the model parameters.
-            optimizer.zero_grad(set_to_none=True)
-            loss.backward()
-
-            # Clip gradients to prevent exploding gradients.
+            # Clip gradients to prevent exploding gradients (unscale first for fp16 AMP).
+            scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 
-            optimizer.step()
+            scaler.step(optimizer)
+            scaler.update()
             last_completed_step = step
 
             # Measure step time and instantaneous throughput for diagnostics.

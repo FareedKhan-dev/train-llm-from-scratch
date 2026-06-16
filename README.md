@@ -274,6 +274,19 @@ python scripts/train_transformer.py --resume models/transformer_B_checkpoints/ch
 
 The periodic checkpoints include the model state, optimizer state, loss history, last completed training step, and learning-rate metadata.
 
+If a large config runs out of VRAM (see issue #5), enable the opt-in memory optimisations (all are off by default, so default behaviour is unchanged):
+```bash
+# bf16 mixed precision + activation checkpointing + 8 micro-batches per step (8x effective batch)
+python scripts/train_transformer.py --amp --grad-checkpointing --grad-accum 8
+
+# print a rough VRAM budget (params + optimizer state) before training
+python scripts/train_transformer.py --report-memory
+```
+- `--amp [--amp-dtype bf16|fp16]`: mixed-precision autocast (CUDA only; auto-disabled on CPU). `bf16` needs no loss scaler; `fp16` uses a `GradScaler`.
+- `--grad-checkpointing`: recompute transformer-block activations during backprop to save activation memory (trades ~20-30% compute).
+- `--grad-accum N`: accumulate gradients over N micro-batches so the effective batch size is `t_batch_size x N` without the memory of a larger batch.
+- `--report-memory`: print an estimated VRAM budget so you can predict OOM before launching.
+
 To generate text using the trained model, run:
 ```bash
 python scripts/generate_text.py --model_path models/your_model.pth --input_text hi

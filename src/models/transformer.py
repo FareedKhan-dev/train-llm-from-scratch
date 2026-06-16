@@ -3,6 +3,7 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.utils.checkpoint as checkpoint
 from src.models.transformer_block import Block
 
 class Transformer(nn.Module):
@@ -33,6 +34,10 @@ class Transformer(nn.Module):
         super().__init__()
         self.context_length = context_length
         self.N_BLOCKS = N_BLOCKS
+        # Opt-in activation (gradient) checkpointing; off by default so behaviour and
+        # numerics are unchanged unless a caller explicitly turns it on (e.g. the
+        # pretraining script's --grad-checkpointing flag to save VRAM). See issue #5.
+        self.gradient_checkpointing = False
         self.token_embed = nn.Embedding(vocab_size, n_embed)
         self.position_embed = nn.Embedding(context_length, n_embed)
         self.attn_blocks = nn.ModuleList([Block(n_head, n_embed, context_length) for _ in range(N_BLOCKS)])
@@ -73,7 +78,13 @@ class Transformer(nn.Module):
         """
         x = self._pre_attn_pass(idx)
         for block in self.attn_blocks:
-            x = block(x)
+            if self.gradient_checkpointing and self.training:
+                # Recompute block activations in backward instead of storing them,
+                # trading compute for a large activation-memory saving. use_reentrant=False
+                # is the modern, correct variant.
+                x = checkpoint.checkpoint(block, x, use_reentrant=False)
+            else:
+                x = block(x)
         return self.layer_norm(x)
 
     def forward(self, idx: torch.Tensor, targets: torch.Tensor = None) -> tuple[torch.Tensor, torch.Tensor | None]:
@@ -92,8 +103,11 @@ class Transformer(nn.Module):
         loss = None
         if targets is not None:
             B, T, C = logits.shape
-            flat_logits = logits.view(B * T, C)
-            targets = targets.view(B * T).long()
+            # reshape (not view): targets come from a non-contiguous slice of the
+            # batch tensor, which makes .view() raise on CPU (the cross-device .to('cuda')
+            # copy happens to make it contiguous, which is why this only bit CPU runs).
+            flat_logits = logits.reshape(B * T, C)
+            targets = targets.reshape(B * T).long()
             loss = F.cross_entropy(flat_logits, targets)
         return logits, loss
 
