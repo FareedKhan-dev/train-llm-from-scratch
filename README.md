@@ -261,6 +261,19 @@ python scripts/train_transformer.py
 
 It will start training the model and save the trained model in the `models/` default directory or the directory specified in the configuration file.
 
+For long runs, you can save periodic checkpoints and resume after an interruption:
+```bash
+python scripts/train_transformer.py --checkpoint-every 1000 --keep-last 3
+
+# Resume from the newest checkpoint in the default checkpoint directory
+python scripts/train_transformer.py --resume latest
+
+# Or resume from a specific checkpoint
+python scripts/train_transformer.py --resume models/transformer_B_checkpoints/checkpoint_step_00000999.pt
+```
+
+The periodic checkpoints include the model state, optimizer state, loss history, last completed training step, and learning-rate metadata.
+
 To generate text using the trained model, run:
 ```bash
 python scripts/generate_text.py --model_path models/your_model.pth --input_text hi
