@@ -10,6 +10,7 @@ dist/
 
 # generated docs site
 site/
+.superpowers/
 
 # data / model artifacts (kept on the /ephemeral disk, not committed)
 data/

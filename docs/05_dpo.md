@@ -7,6 +7,9 @@ SFT model as a reference anchor. No reward model, no rollouts, no value function
 I also implemented two popular variants behind a `--loss_type` flag: **ORPO** (reference-free) and
 **KTO** (works from a desirable/undesirable signal).
 
+For the sequence log-probability notation used here, see
+[Objectives, Losses & Perplexity](foundations/objectives.md).
+
 ![DPO / ORPO / KTO](diagrams/05_dpo.png)
 
 <details>

@@ -20,6 +20,12 @@ I implemented a transformer model from scratch using PyTorch, based on the paper
 > public datasets (Alpaca, Dolly, Anthropic HH-RLHF, UltraFeedback, GSM8K) and built for
 > multi-GPU (DDP + bf16). See **[POST_TRAINING.md](POST_TRAINING.md)** for the full guide.
 
+> **New: foundations-first tutorial documentation.**
+> If you want to understand the codebase before running the full training pipeline, start with the
+> **[LLM Foundations tutorial](docs/foundations/README.md)**. It explains tokenization, data shapes,
+> decoder-only Transformers, attention, losses, optimization, and generation with diagrams, formulas,
+> and links back to the source code. The full MkDocs site starts at **[docs/README.md](docs/README.md)**.
+
 Below is the output of the trained 13 million parameter LLM:
 
 ```
@@ -34,6 +40,7 @@ Odambinais is uncertain and fortune established in rural areas.
 ## Table of Contents
 - [Training Data Info](#training-data-info)
 - [Prerequisites and Training Time](#prerequisites-and-training-time)
+- [Documentation Site](#documentation-site)
 - [Code Structure](#code-structure)
 - [Usage](#usage)
 - [Step by Step Code Explanation](#step-by-step-code-explanation)
@@ -135,6 +142,20 @@ A community run on an NVIDIA GeForce RTX 5090 validated the following:
 - observed training throughput during eval intervals was typically in the tens of thousands of tokens/sec on this small config
 
 The training script now prints lightweight runtime diagnostics to make these reports easier to collect. Newer PyTorch versions may also require explicit checkpoint loading compatibility handling during generation.
+
+## Documentation Site
+
+The repository includes a Material for MkDocs documentation site under [`docs/`](docs/README.md).
+For a foundations-first learning path, start with [`docs/foundations/README.md`](docs/foundations/README.md),
+then continue through the data, pretraining, SFT, reward-model, DPO, PPO, GRPO, evaluation, and
+inference pages.
+
+Run the docs locally with:
+
+```bash
+pip install -e ".[docs]"
+mkdocs serve
+```
 
 ## Code Structure
 

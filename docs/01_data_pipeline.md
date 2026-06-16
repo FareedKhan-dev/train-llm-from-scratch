@@ -6,6 +6,10 @@ battle — a misaligned loss mask or a mis-parsed gold answer will silently wrec
 any model code, here is exactly how I download and preprocess each dataset, and the format each
 trainer expects.
 
+For the first-principles background behind these shapes, read
+[Tokenization & Data Shapes](foundations/tokenization.md). That page explains why pretraining uses
+flat token streams, why SFT needs `loss_mask`, and why preference data must preserve a shared prompt.
+
 There are **four** data pipelines, all feeding off real public datasets:
 
 ![Data preprocessing pipelines](diagrams/01_data_pipeline.png)

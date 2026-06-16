@@ -50,6 +50,8 @@ markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
+  - pymdownx.arithmatex:
+      generic: true
   - pymdownx.snippets:
       base_path: ["."]          # so howto/commands.md can include the root POST_TRAINING.md
   - pymdownx.superfences:
@@ -62,9 +64,19 @@ markdown_extensions:
 
 extra_javascript:
   - https://unpkg.com/mermaid@11/dist/mermaid.min.js   # live hand-drawn mermaid in <details>
+  - javascripts/mathjax.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
 
 nav:
   - Home: README.md
+  - Foundations:
+      - Overview: foundations/README.md
+      - Tokenization & Data Shapes: foundations/tokenization.md
+      - Decoder-Only Transformer: foundations/transformer.md
+      - Attention, Masks & Heads: foundations/attention.md
+      - Objectives, Losses & Perplexity: foundations/objectives.md
+      - Optimization & Training Systems: foundations/optimization.md
+      - Generation & Sampling: foundations/generation.md
   - Theory & Pipeline:
       - Data handling: 01_data_pipeline.md
       - Pretraining: 02_pretraining.md

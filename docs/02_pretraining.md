@@ -8,6 +8,12 @@ model on 2×H100 I wrote [`pretrain_base.py`](https://github.com/FareedKhan-dev/
 that actually matter at this scale — DistributedDataParallel, bf16 autocast, gradient accumulation, a
 cosine LR schedule with warmup, and periodic checkpointing — without touching the model itself.
 
+If the architecture or training terms are unfamiliar, read the foundations chapters first:
+[Decoder-Only Transformer](foundations/transformer.md),
+[Attention, Masks & Heads](foundations/attention.md),
+[Objectives, Losses & Perplexity](foundations/objectives.md), and
+[Optimization & Training Systems](foundations/optimization.md).
+
 ![Pretraining loop](diagrams/02_pretraining.png)
 
 <details>
