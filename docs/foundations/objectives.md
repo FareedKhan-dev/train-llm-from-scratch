@@ -94,8 +94,7 @@ So an untrained model often starts near that value.
 SFT still uses next-token cross-entropy, but only assistant completion tokens count:
 
 \[
-\mathcal{L}_{\text{SFT}}
-=
+\mathcal{L}_{\text{SFT}} =
 \frac{\sum_{b,t} m_{b,t}\,\ell_{b,t}}
 {\sum_{b,t} m_{b,t}}
 \]
@@ -155,8 +154,7 @@ against a frozen reference model:
 \]
 
 \[
-\mathcal{L}_{\text{DPO}}
-=
+\mathcal{L}_{\text{DPO}} =
 -\log \sigma\left(\beta(\Delta_\pi - \Delta_{\text{ref}})\right)
 \]
 
@@ -187,8 +185,7 @@ r_t(\theta) =
 The clipped policy objective is:
 
 \[
-\mathcal{L}_{\text{PPO}}
-=
+\mathcal{L}_{\text{PPO}} =
 -\mathbb{E}_t
 \left[
 \min
