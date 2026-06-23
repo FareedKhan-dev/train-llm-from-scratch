@@ -157,3 +157,6 @@ as the gold it compares against.
 | `preferences.jsonl` (+ `_test`) | `{prompt, chosen, rejected}` | Reward Model, DPO |
 | `rl_prompts_train.jsonl` / `_test` | `{prompt, gold}` | PPO, GRPO |
 | `arithmetic_prompts.jsonl` | `{prompt, gold}` | GRPO curriculum warm-up |
+<br>
+
+➡️ Next: [Stage 1 — Pretraining](02_pretraining.md).
