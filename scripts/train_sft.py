@@ -111,7 +111,10 @@ def main():
                             metrics={"train_loss": loss.item()})
 
     if ctx.is_main:
-        dev = eval_dev(model, cfg, ctx, DEV_PATH)
+        # Use the unwrapped model for the final eval: the other ranks have already reached
+        # cleanup(), so calling the DDP-wrapped model here would launch a collective with no
+        # peer and hang (NCCL timeout). The periodic eval above runs on all ranks, so it is fine.
+        dev = eval_dev(unwrap(model), cfg, ctx, DEV_PATH)
         save_stage_ckpt(cfg.out_ckpt, model, optimizer, stage="sft", cfg=cfg, step=total_steps,
                         metrics={"dev_loss": dev})
         print(f"Done SFT. dev_loss {dev:.4f} -> {cfg.out_ckpt}")
