@@ -4,8 +4,8 @@
 
 <!-- omit in toc -->
 # Train LLM From Scratch
-  
-![Python](https://img.shields.io/badge/Python-3.8%2B-blue) ![License](https://img.shields.io/badge/License-MIT-green) ![Contributions](https://img.shields.io/badge/Contributions-Welcome-blue) [![Docs](https://img.shields.io/badge/Docs-Available-success)](#step-by-step-code-explanation)
+
+![Python](https://img.shields.io/badge/Python-3.9%2B-blue) ![License](https://img.shields.io/badge/License-MIT-green) ![Contributions](https://img.shields.io/badge/Contributions-Welcome-blue) [![Docs](https://img.shields.io/badge/Docs-Available-success)](https://fareedkhan-dev.github.io/train-llm-from-scratch/)
 
 **I am Looking for a PhD position in AI**. [GitHub](https://github.com/FareedKhan-dev)
 
@@ -13,754 +13,359 @@
 
 I implemented a transformer model from scratch using PyTorch, based on the paper [Attention is All You Need](https://arxiv.org/abs/1706.03762). You can use my scripts to train your own **billion** or **million** parameter LLM using a single GPU.
 
-> **New: from-scratch post-training suite (SFT · Reward Model · PPO · DPO · GRPO/RLVR).**
-> The repo now goes beyond pretraining all the way to a modern aligned reasoning model —
-> `Base → SFT → Reward Model → {PPO, DPO} → GRPO` — every algorithm hand-written in pure
-> PyTorch (no `trl`/`peft`/`transformers`) on this repo's own `Transformer`, trained on real
-> public datasets (Alpaca, Dolly, Anthropic HH-RLHF, UltraFeedback, GSM8K) and built for
-> multi-GPU (DDP + bf16). See **[POST_TRAINING.md](POST_TRAINING.md)** for the full guide.
+This started as a pretraining tutorial. It now goes all the way from raw text to an aligned, reasoning style model, with every algorithm hand written in plain PyTorch (no `trl`, no `peft`, no `transformers`). The whole journey is one idea repeated: turn text into numbers, predict the next token, then keep changing the data and the loss until the model does what we want.
 
-> **New: foundations-first tutorial documentation.**
-> If you want to understand the codebase before running the full training pipeline, start with the
-> **[LLM Foundations tutorial](docs/foundations/README.md)**. It explains tokenization, data shapes,
-> decoder-only Transformers, attention, losses, optimization, and generation with diagrams, formulas,
-> and links back to the source code. The full MkDocs site starts at **[docs/README.md](docs/README.md)**.
+![From raw text to an aligned reasoning model](images/00_pipeline.png)
 
-Below is the output of the trained 13 million parameter LLM:
+Here is the path we will walk, end to end:
 
 ```
-In ***1978, The park was returned to the factory-plate that 
-the public share to the lower of the electronic fence that 
-follow from the Station's cities. The Canal of ancient Western 
-nations were confined to the city spot. The villages were directly 
+raw text  ->  tokens  ->  a Transformer  ->  next-token loss  ->  a base model
+base model  ->  SFT  ->  Reward Model  ->  {PPO, DPO}  ->  GRPO  ->  evaluation and chat
+```
+
+Below is the output of a trained 13 million parameter LLM, just so you can see where the small end of this starts:
+
+```
+In ***1978, The park was returned to the factory-plate that
+the public share to the lower of the electronic fence that
+follow from the Station's cities. The Canal of ancient Western
+nations were confined to the city spot. The villages were directly
 linked to cities in China that revolt that the US budget and in
 Odambinais is uncertain and fortune established in rural areas.
 ```
+
 <!-- omit in toc -->
 ## Table of Contents
-- [Training Data Info](#training-data-info)
+- [Who this is for](#who-this-is-for)
 - [Prerequisites and Training Time](#prerequisites-and-training-time)
-- [Documentation Site](#documentation-site)
+- [Setup](#setup)
 - [Code Structure](#code-structure)
-- [Usage](#usage)
-- [Step by Step Code Explanation](#step-by-step-code-explanation)
-  - [Importing Libraries](#importing-libraries)
-  - [Preparing the Training Data](#preparing-the-training-data)
-  - [Transformer Overview](#transformer-overview)
+- [Step 1: Preparing the Data](#step-1-preparing-the-data)
+- [Step 2: The Model, Built From Small Pieces](#step-2-the-model-built-from-small-pieces)
   - [Multi Layer Perceptron (MLP)](#multi-layer-perceptron-mlp)
   - [Single Head Attention](#single-head-attention)
   - [Multi Head Attention](#multi-head-attention)
-  - [Transformer Block](#transformer-block)
-  - [The Final Model](#the-final-model)
-  - [Batch Processing](#batch-processing)
-  - [Training Parameters](#training-parameters)
-  - [Training the Model](#training-the-model)
-  - [Saving the Trained Model](#saving-the-trained-model)
-  - [Training Loss](#training-loss)
-  - [Generating Text](#generating-text)
-- [Post-Training & Alignment (SFT · RM · PPO · DPO · GRPO)](#post-training--alignment-sft--rm--ppo--dpo--grpo)
-- [What’s Next](#whats-next)
+  - [The Transformer Block](#the-transformer-block)
+  - [The Full Transformer](#the-full-transformer)
+- [Step 3: Pretraining the Base Model](#step-3-pretraining-the-base-model)
+- [Step 4: Generating Text](#step-4-generating-text)
+- [Step 5: Post-Training, Turning a Base Model Into an Assistant](#step-5-post-training-turning-a-base-model-into-an-assistant)
+  - [SFT (Supervised Fine-Tuning)](#sft-supervised-fine-tuning)
+  - [The Reward Model](#the-reward-model)
+  - [DPO, ORPO and KTO](#dpo-orpo-and-kto)
+  - [PPO](#ppo)
+  - [GRPO / RLVR](#grpo--rlvr)
+- [Step 6: Evaluation](#step-6-evaluation)
+- [Step 7: Talking to the Model](#step-7-talking-to-the-model)
+- [The Streamlit Control Panel](#the-streamlit-control-panel)
+- [The Documentation Site](#the-documentation-site)
+- [Run the Whole Thing](#run-the-whole-thing)
+- [What's Next](#whats-next)
 
-## Training Data Info
+## Who this is for
 
-Training data is from the Pile dataset, which is a diverse, open-source, and large-scale dataset for training language models. The Pile dataset is a collection of 22 diverse datasets, including text from books, articles, websites, and more. The total size of the Pile dataset is 825GB, Below is the sample of the training data:
+I tried to write this so one page works for very different readers:
 
-```python
-Line: 0 
-{
-  "text": "Effect of sleep quality ... epilepsy.",
-  "meta": {
-    "pile_set_name": "PubMed Abstracts"
-  }
-}
+- If you are a **student**, read top to bottom. Every block of code comes after a plain explanation of what it does and why, and most blocks are followed by the output you should expect.
+- If you are a **developer**, the commands and file paths are all here. You can copy, run, and read the referenced source files directly.
+- If you are a **researcher**, the post-training half is the interesting part: SFT, a Bradley-Terry reward model, PPO with GAE, DPO/ORPO/KTO, and GRPO, all from scratch on the same small Transformer, trained on real public datasets.
 
-Line: 1
-{
-  "text": "LLMops a new GitHub Repository ...",
-  "meta": {
-    "pile_set_name": "Github"
-  }
-}
-```
+Every diagram in this README is colored the same way, so the colors mean something:
+
+- green is raw data
+- teal is stored, tokenized data on disk
+- blue is a plain processing step
+- yellow is the model or a training step
+- orange is the reinforcement learning and reward parts
+- red is a loss
+- grey is a saved checkpoint
+- purple is the final output or evaluation
 
 ## Prerequisites and Training Time
 
-Make sure you have a basic understanding of object-oriented programming (OOP), neural networks (NN) and PyTorch to understand the code. Below are some resources to help you get started:
+You need a basic understanding of object oriented programming, neural networks, and PyTorch. Below are some resources to help you get started:
 
 | Topic               | Video Link                                                |
 |---------------------|-----------------------------------------------------------|
-| OOP                 | [OOP Video](https://www.youtube.com/watch?v=Ej_02ICOIgs&pp=ygUKb29wIHB5dGhvbg%3D%3D) |
-| Neural Network      | [Neural Network Video](https://www.youtube.com/watch?v=Jy4wM2X21u0&pp=ygUbbmV1cmFsIG5ldHdvcmsgcHl0aG9uIHRvcmNo) |
-| Pytorch             | [Pytorch Video](https://www.youtube.com/watch?v=V_xro1bcAuA&pp=ygUbbmV1cmFsIG5ldHdvcmsgcHl0aG9uIHRvcmNo) |
+| OOP                 | [OOP Video](https://www.youtube.com/watch?v=Ej_02ICOIgs) |
+| Neural Network      | [Neural Network Video](https://www.youtube.com/watch?v=Jy4wM2X21u0) |
+| Pytorch             | [Pytorch Video](https://www.youtube.com/watch?v=V_xro1bcAuA) |
 
-You will need a GPU to train your model. Colab or Kaggle T4 will work for training a 13+ million-parameter model, but they will fail for billion-parameter training. Take a look at the comparison:
+You will need a GPU to train. A free Colab or Kaggle T4 is enough for the 13 million parameter model, but it will not fit a billion parameter model. Here is a rough guide:
 
-| GPU Name                 | Memory | Data Size | 2B LLM Training | 13M LLM Training | Max Practical LLM Size (Training) |
-|--------------------------|--------|-----------|-----------------|------------------|-----------------------------------|
-| NVIDIA A100              | 40 GB  | Large     | ✔               | ✔                | ~6B–8B                             |
-| NVIDIA V100              | 16 GB  | Medium    | ✘               | ✔                | ~2B                               |
-| AMD Radeon VII           | 16 GB  | Medium    | ✘               | ✔                | ~1.5B–2B                          |
-| NVIDIA RTX 3090          | 24 GB  | Large     | ✔               | ✔                | ~3.5B–4B                          |
-| Tesla P100               | 16 GB  | Medium    | ✘               | ✔                | ~1.5B–2B                          |
-| NVIDIA RTX 3080          | 10 GB  | Medium    | ✘               | ✔                | ~1.2B                             |
-| AMD RX 6900 XT           | 16 GB  | Large     | ✘               | ✔                | ~2B                               |
-| NVIDIA GTX 1080 Ti       | 11 GB  | Medium    | ✘               | ✔                | ~1.2B                             |
-| Tesla T4                 | 16 GB  | Small     | ✘               | ✔                | ~1.5B–2B                          |
-| NVIDIA Quadro RTX 8000   | 48 GB  | Large     | ✔               | ✔                | ~8B–10B                           |
-| NVIDIA RTX 4070          | 12 GB  | Medium    | ✘               | ✔                | ~1.5B                             |
-| NVIDIA RTX 4070 Ti       | 12 GB  | Medium    | ✘               | ✔                | ~1.5B                             |
-| NVIDIA RTX 4080          | 16 GB  | Medium    | ✘               | ✔                | ~2B                               |
-| NVIDIA RTX 4090          | 24 GB  | Large     | ✔               | ✔                | ~4B                               |
-| NVIDIA RTX 5090          | 32 GB* | Large     | ✔*              | ✔                | 13M verified; larger configs TBD* |
-| NVIDIA RTX 4060 Ti       | 8 GB   | Small     | ✘               | ✔                | ~1B                               |
-| NVIDIA RTX 4060          | 8 GB   | Small     | ✘               | ✔                | ~1B                               |
-| NVIDIA RTX 4050          | 6 GB   | Small     | ✘               | ✔                | ~0.75B                            |
-| NVIDIA RTX 3070          | 8 GB   | Small     | ✘               | ✔                | ~1B                               |
-| NVIDIA RTX 3060 Ti       | 8 GB   | Small     | ✘               | ✔                | ~1B                               |
-| NVIDIA RTX 3060          | 12 GB  | Medium    | ✘               | ✔                | ~1.5B                             |
-| NVIDIA RTX 3050          | 8 GB   | Small     | ✘               | ✔                | ~1B                               |
-| NVIDIA GTX 1660 Ti       | 6 GB   | Small     | ✘               | ✔                | ~0.75B                            |
-| AMD RX 7900 XTX          | 24 GB  | Large     | ✔               | ✔                | ~3.5B–4B                          |
-| AMD RX 7900 XT           | 20 GB  | Large     | ✔               | ✔                | ~3B                               |
-| AMD RX 7800 XT           | 16 GB  | Medium    | ✘               | ✔                | ~2B                               |
-| AMD RX 7700 XT           | 12 GB  | Medium    | ✘               | ✔                | ~1.5B                             |
-| AMD RX 7600              | 8 GB   | Small     | ✘               | ✔                | ~1B                               |
+| GPU Name                 | Memory | 2B LLM Training | 13M LLM Training | Max Practical LLM Size (Training) |
+|--------------------------|--------|-----------------|------------------|-----------------------------------|
+| NVIDIA A100              | 40 GB  | ✔               | ✔                | ~6B to 8B                          |
+| NVIDIA V100              | 16 GB  | ✘               | ✔                | ~2B                               |
+| NVIDIA RTX 4090          | 24 GB  | ✔               | ✔                | ~4B                               |
+| NVIDIA RTX 5090          | 32 GB  | ✔               | ✔                | 13M verified, larger configs TBD  |
+| NVIDIA RTX 3090          | 24 GB  | ✔               | ✔                | ~3.5B to 4B                        |
+| NVIDIA RTX 4080          | 16 GB  | ✘               | ✔                | ~2B                               |
+| NVIDIA RTX 4060          | 8 GB   | ✘               | ✔                | ~1B                               |
+| Tesla T4                 | 16 GB  | ✘               | ✔                | ~1.5B to 2B                        |
 
-The 13M LLM training is the training of a 13+ million-parameter model, and the 2B LLM training is the training of a 2+ billion-parameter model. The data size is categorized as small, medium, and large. The small data size is around 1 GB, the medium data size is around 5 GB, and the large data size is around 10 GB.
+If a large config runs out of memory, the pretraining script has opt-in flags (`--amp`, `--grad-checkpointing`, `--grad-accum`) that bring the memory down a lot. More on those later.
 
-* Community validation on an NVIDIA GeForce RTX 5090 has confirmed that the official README flow works for the 13M configuration using PyTorch 2.11.0+cu128 and CUDA 12.8. In one successful run, the 13M model trained to completion, wrote a checkpoint, and the generated checkpoint was successfully loaded for text generation. Practical limits for larger configurations still depend on training dtype, batch size, context length, optimizer state, and any memory-saving techniques used.
+## Setup
 
-### Community-tested modern GPU notes
+Clone the repository and install it in editable mode. The editable install puts `config`, `src`, `data_loader`, and `ui` on your import path, so you do not need to set `PYTHONPATH` by hand anymore:
 
-A community run on an NVIDIA GeForce RTX 5090 validated the following:
-- official dataset download and preprocessing flow completed successfully
-- the README-recommended 13M configuration trained successfully to completion
-- checkpoint saving and text generation both worked
-- PyTorch version: 2.11.0+cu128
-- CUDA version: 12.8
-- PyTorch-reported peak VRAM during 13M training stayed around 0.60 GiB allocated / 0.67 GiB reserved
-- observed training throughput during eval intervals was typically in the tens of thousands of tokens/sec on this small config
-
-The training script now prints lightweight runtime diagnostics to make these reports easier to collect. Newer PyTorch versions may also require explicit checkpoint loading compatibility handling during generation.
-
-## Documentation Site
-
-The repository includes a Material for MkDocs documentation site under [`docs/`](docs/README.md).
-For a foundations-first learning path, start with [`docs/foundations/README.md`](docs/foundations/README.md),
-then continue through the data, pretraining, SFT, reward-model, DPO, PPO, GRPO, evaluation, and
-inference pages.
-
-Run the docs locally with:
-
-```bash
-pip install -e ".[docs]"
-mkdocs serve
-```
-
-## Code Structure
-
-The codebase is organized as follows:
-```bash
-train-llm-from-scratch/
-├── src/          
-│   ├── models/   
-│   │   ├── mlp.py       # Definition of the Multi-Layer Perceptron (MLP) module
-│   │   ├── attention.py # Definitions for attention mechanisms (single-head, multi-head)
-│   │   ├── transformer_block.py # Definition of a single Transformer block
-│   │   ├── transformer.py     # Definition of the main Transformer model
-├── config/       
-│   └── config.py    # Contains default configurations (model parameters, file paths, etc.)
-├── data_loader/  
-│   └── data_loader.py # Contains functions for creating data loaders/iterators
-├── scripts/      
-│   ├── train_transformer.py # Script for training the Transformer model
-│   ├── data_download.py   # Script for downloading the dataset
-│   ├── data_preprocess.py # Script for preprocessing the downloaded data
-│   ├── generate_text.py   # Script for generating text using a trained model
-├── data/         # Directory to store the dataset
-│   ├── train/     # Contains training data
-│   └── val/       # Contains validation data
-├── models/       # Directory where trained models are saved
-│
-│   # ── Post-training & tooling (added on top of the base; see POST_TRAINING.md / docs/) ──
-├── src/post_training/   # from-scratch SFT · reward model · PPO · DPO · GRPO + rollout/eval/inference
-├── configs/             # editable JSON configs: base.json + one per stage (+ smoke/)
-├── config/loader.py     # loads configs/*.json into the stage dataclasses (defaults < base < stage < CLI)
-├── ui/                  # Streamlit control panel: train · evaluate · chat (with theory) — `streamlit run ui/app.py`
-├── docs/                # Material for MkDocs site (theory + hand-drawn diagrams)
-├── mkdocs.yml           # docs-site config
-└── pyproject.toml       # `pip install -e .` (no more PYTHONPATH=.)
-```
-
-`scripts/` directory contains scripts for downloading the dataset, preprocessing the data, training the model, and generating text using the trained model. `src/models/` directory contains the implementation of the transformer model, multi-layer perceptron (MLP), attention mechanisms, and transformer blocks.`config/` directory contains the configuration file with default parameters. `data_loader/` directory contains functions for creating data loaders/iterators.
-
-> **Beyond the base model:** `src/post_training/` adds the full alignment suite (SFT → reward model → PPO/DPO → GRPO), configured by editable JSON in `configs/`, with a beautiful Streamlit control panel (`ui/`) and a Material for MkDocs site (`docs/`). The original teaching files above are unchanged. See **[POST_TRAINING.md](POST_TRAINING.md)** and the [`docs/`](docs/README.md) site.
-
-## Usage
-
-Clone the repository and navigate to the directory:
 ```bash
 git clone https://github.com/FareedKhan-dev/train-llm-from-scratch.git
 cd train-llm-from-scratch
+pip install -e .
 ```
 
-if you encounter any issues regarding the imports, make sure to change pythonpath to the root directory of the project:
-```bash
-export PYTHONPATH="${PYTHONPATH}:/path/to/train-llm-from-scratch"
-
-# or if you are already in the train-llm-from-scratch directory
-export PYTHONPATH="$PYTHONPATH:."
-```
-
-Install the required dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-You can modify the transformer architecture under `src/models/transformer.py` and the training configurations under `config/config.py`.
-
-
-To download the training data, run:
-```bash
-python scripts/data_download.py
-```
-
-The script supports the following arguments:
-* `--train_max`: Maximum number of training files to download. Default is 1 (Max equal to 30) Each file is around 11 GB.
-* `--train_dir`: Directory for storing training data. Default is `data/train`.
-* `--val_dir`: Directory for storing validation data. Default is `data/val`.
-
-To preprocess the downloaded data, run:
-```bash
-python scripts/data_preprocess.py
-```
-
-The script supports the following arguments:
-- `--train_dir`: Directory where the training data files are stored (default is `data/train`).
-- `--val_dir`: Directory where the validation data files are stored (default is `data/val`).
-- `--out_train_file`: Path to store the processed training data in HDF5 format (default is `data/train/pile_train.h5`).
-- `--out_val_file`: Path to store the processed validation data in HDF5 format (default is `data/val/pile_dev.h5`).
-- `--tokenizer_name`: Name of the tokenizer to use for processing the data (default is `r50k_base`).
-- `--max_data`: Maximum number of JSON objects ([lines](#training-data-info)) to process from each dataset (both train and validation). The default is 1000.
-
-Now that the data is preprocessed, you can train the 13 million parameter llm by changing the configuration in `config/config.py` to this:
-
-```python
-# Define vocabulary size and transformer configuration (3 Billion)
-VOCAB_SIZE = 50304          # Number of unique tokens in the vocabulary
-CONTEXT_LENGTH = 128        # Maximum sequence length for the model
-N_EMBED = 128               # Dimension of the embedding space
-N_HEAD = 8                  # Number of attention heads in each transformer block
-N_BLOCKS = 1               # Number of transformer blocks in the model
-```
-
-To train the model, run:
-```bash
-python scripts/train_transformer.py
-```
-
-It will start training the model and save the trained model in the `models/` default directory or the directory specified in the configuration file.
-
-For long runs, you can save periodic checkpoints and resume after an interruption:
-```bash
-python scripts/train_transformer.py --checkpoint-every 1000 --keep-last 3
-
-# Resume from the newest checkpoint in the default checkpoint directory
-python scripts/train_transformer.py --resume latest
-
-# Or resume from a specific checkpoint
-python scripts/train_transformer.py --resume models/transformer_B_checkpoints/checkpoint_step_00000999.pt
-```
-
-The periodic checkpoints include the model state, optimizer state, loss history, last completed training step, and learning-rate metadata.
-
-If a large config runs out of VRAM (see issue #5), enable the opt-in memory optimisations (all are off by default, so default behaviour is unchanged):
-```bash
-# bf16 mixed precision + activation checkpointing + 8 micro-batches per step (8x effective batch)
-python scripts/train_transformer.py --amp --grad-checkpointing --grad-accum 8
-
-# print a rough VRAM budget (params + optimizer state) before training
-python scripts/train_transformer.py --report-memory
-```
-- `--amp [--amp-dtype bf16|fp16]`: mixed-precision autocast (CUDA only; auto-disabled on CPU). `bf16` needs no loss scaler; `fp16` uses a `GradScaler`.
-- `--grad-checkpointing`: recompute transformer-block activations during backprop to save activation memory (trades ~20-30% compute).
-- `--grad-accum N`: accumulate gradients over N micro-batches so the effective batch size is `t_batch_size x N` without the memory of a larger batch.
-- `--report-memory`: print an estimated VRAM budget so you can predict OOM before launching.
-
-To generate text using the trained model, run:
-```bash
-python scripts/generate_text.py --model_path models/your_model.pth --input_text hi
-```
-
-The script supports the following arguments:
-- `--model_path`: Path to the trained model.
-- `--input_text`: Initial text prompt for generating new text.
-- `--max_new_tokens`: Maximum number of tokens to generate (default is 100).
-
-It will generate text based on the input prompt using the trained model.
-
-## Step by Step Code Explanation
-
-This section is for those who want to understand the code in detail. I will explain the code step by step, starting from importing the libraries to training the model and generating text.
-
-Previously, I wrote an article on Medium about creating a [2.3+ million-parameter](https://levelup.gitconnected.com/building-a-million-parameter-llm-from-scratch-using-python-f612398f06c2) LLM using the Tiny Shakespeare dataset, but the output didn’t make sense. Here is a sample output:
+There are optional extras for the parts you want:
 
 ```bash
-# 2.3 Million Parameter LLM Output
-ZELBETH:
-Sey solmenter! tis tonguerered if
-Vurint as steolated have loven OID the queend refore
-Are been, good plmp:
-
-Proforne, wiftes swleen, was no blunderesd a a quain beath!
-Tybell is my gateer stalk smend as be matious dazest
+pip install -e ".[train]"   # datasets + wandb, for downloading data and logging
+pip install -e ".[ui]"      # streamlit + pandas + altair, for the control panel
+pip install -e ".[docs]"    # mkdocs, for the documentation site
+pip install -e ".[all]"     # everything
 ```
 
-I had a thought, what if I make the transformer architecture smaller and less complex, and the training data more diverse? Then, how big of a model could a single person, using their nearly dead GPU, create in terms of parameters that can speak proper grammar and generate text that makes some sense?
+There are two config systems, and it helps to know which is which from the start:
 
-I found that **13+ million-parameter** models are enough to start making sense in terms of proper grammar and punctuation, which is a positive point. This means we can use a very specific dataset to further fine-tune our previously trained model for a narrowed task. We might end up with a model under 1 billion parameters or even around 500 million parameters that is perfect for our specific use case, especially for running it on private data securely.
+- `config/config.py` is the original, simple config for the legacy pretraining script `scripts/train_transformer.py`. It is plain Python constants.
+- `config/post_training_config.py` plus the JSON files in `configs/` drive everything else (pretraining the bigger base, SFT, reward, DPO, PPO, GRPO). You edit a small JSON file per stage, and any field can also be overridden on the command line, for example `--lr 2e-5 --batch_size 16`.
 
-I recommend you **first train a 13+ million-parameter** model using the script available in my GitHub repository. You will get results within one day, instead of waiting for a longer time, or if your local GPU might not be strong enough to train a billion-parameter model.
+For fast checks there is a tiny `configs/smoke/` variant of every stage that shrinks the model so a full run finishes in seconds on a CPU or a single GPU.
 
-### Importing Libraries
+## Code Structure
 
-Let’s import the required libraries that will be used throughout this blog:
-
-```python
-# PyTorch for deep learning functions and tensors
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
-# Numerical operations and arrays handling
-import numpy as np
-
-# Handling HDF5 files
-import h5py
-
-# Operating system and file management
-import os
-
-# Command-line argument parsing
-import argparse
-
-# HTTP requests and interactions
-import requests
-
-# Progress bar for loops
-from tqdm import tqdm
-
-# JSON handling
-import json
-
-# Zstandard compression library
-import zstandard as zstd
-
-# Tokenization library for large language models
-import tiktoken
-
-# Math operations (used for advanced math functions)
-import math
+```bash
+train-llm-from-scratch/
+├── src/
+│   ├── models/                  # the Transformer, built from small pieces
+│   │   ├── mlp.py               # the feed-forward block
+│   │   ├── attention.py         # single head and multi head attention
+│   │   ├── transformer_block.py # one block: attention + MLP + residuals
+│   │   └── transformer.py       # the full model: embeddings + blocks + lm_head
+│   └── post_training/           # SFT, reward model, PPO, DPO, GRPO, eval, inference
+├── config/
+│   ├── config.py                # legacy pretraining config (plain constants)
+│   ├── post_training_config.py  # dataclasses for every post-training stage
+│   └── loader.py                # merges defaults < base.json < stage.json < CLI
+├── configs/                     # editable JSON, one file per stage (+ smoke/)
+├── data_loader/                 # batch iterators for each kind of data
+├── scripts/                     # every runnable step lives here
+├── ui/                          # the Streamlit control panel
+├── docs/                        # the MkDocs site (theory + diagrams)
+├── images/                      # the diagrams in this README (+ the generator)
+└── pyproject.toml               # pip install -e .
 ```
 
-### Preparing the Training Data
+## Step 1: Preparing the Data
 
-Our training dataset needs to be diverse, containing information from different domains, and The Pile is the right choice for it. Although it is 825 GB in size, we will stick to only a small portion of it, i.e., 5%–10%. Let’s first download the dataset and see how it works. I will be downloading the version available on [HuggingFace](https://huggingface.co/datasets/monology/pile-uncopyrighted).
+A model only ever sees integers. So the first job is always the same: take text, turn it into token ids, and store those ids on disk in a format that is fast to read during training. We do this four times, once for each kind of training we will do later.
 
-```python
-# Download validation dataset
-!wget https://huggingface.co/datasets/monology/pile-uncopyrighted/resolve/main/val.jsonl.zst
+![The data pipeline](images/01_data.png)
 
-# Download the first part of the training dataset
-!wget https://huggingface.co/datasets/monology/pile-uncopyrighted/resolve/main/train/00.jsonl.zst
+The four streams are:
 
-# Download the second part of the training dataset
-!wget https://huggingface.co/datasets/monology/pile-uncopyrighted/resolve/main/train/01.jsonl.zst
+1. **Pretraining text** from [The Pile](https://huggingface.co/datasets/monology/pile-uncopyrighted), stored as a flat array of token ids in an HDF5 file.
+2. **Instruction data** (Alpaca, Dolly, GSM8K) for SFT, packed into fixed length rows with a mask that says which tokens are the assistant's answer.
+3. **Preference pairs** (Anthropic HH-RLHF, UltraFeedback) for the reward model and DPO, stored as `{prompt, chosen, rejected}`.
+4. **RL prompts** (GSM8K and a small arithmetic warm-up) for PPO and GRPO, stored as `{prompt, gold}`.
 
-# Download the third part of the training dataset
-!wget https://huggingface.co/datasets/monology/pile-uncopyrighted/resolve/main/train/02.jsonl.zst
+### Tokenization
+
+We use the `r50k_base` tokenizer from OpenAI's `tiktoken`, the same one GPT-3 used. Text becomes a list of integers, and we append a special `<|endoftext|>` token (id 50256) at the end of every document so the model learns where one piece of text stops and the next begins.
+
+![Tokenization](images/02_tokenization.png)
+
+For the legacy path, download a slice of The Pile and tokenize it into HDF5:
+
+```bash
+python scripts/data_download.py            # downloads the validation file + 1 training shard
+python scripts/data_preprocess.py          # tokenizes to data/train/pile_train.h5 and data/val/pile_dev.h5
 ```
 
-It will take some time to download, but you can also limit the training dataset to just one file, `00.jsonl.zst`, instead of three. It is already split into train/val/test. Once it's done, make sure to place the files correctly in their respective directories.
+The newer, faster path streams and batch-encodes the same data straight into a flat token array:
 
-```python
-import os
-import shutil
-import glob
-
-# Define directory structure
-train_dir = "data/train"
-val_dir = "data/val"
-
-# Create directories if they don't exist
-os.makedirs(train_dir, exist_ok=True)
-os.makedirs(val_dir, exist_ok=True)
-
-# Move all train files (e.g., 00.jsonl.zst, 01.jsonl.zst, ...)
-train_files = glob.glob("*.jsonl.zst")
-for file in train_files:
-    if file.startswith("val"):
-        # Move validation file
-        dest = os.path.join(val_dir, file)
-    else:
-        # Move training file
-        dest = os.path.join(train_dir, file)
-    shutil.move(file, dest)
-
-Our dataset is in the .jsonl.zst format, which is a compressed file format commonly used for storing large datasets. It combines JSON Lines (.jsonl), where each line represents a valid JSON object, with Zstandard (.zst) compression. Let's read a sample of one of the downloaded files and see how it looks.
-
-in_file = "data/val/val.jsonl.zst"  # Path to our validation file
-
-with zstd.open(in_file, 'r') as in_f:
-    for i, line in tqdm(enumerate(in_f)):  # Read first 5 lines
-        data = json.loads(line)
-        print(f"Line {i}: {data}")  # Print the raw data for inspection
-        if i == 2:
-            break
+```bash
+python scripts/prepare_pretrain_data.py --split val   --out data/pile_dev.h5
+python scripts/prepare_pretrain_data.py --split train --num_shards 1 --out data/pile_train.h5
 ```
 
-The output of the above code is this:
+Once tokenized, the data is just a long line of integers. Here is a real peek at the validation file I prepared for this README (8.76 million tokens), the first ten ids, and what they decode back to:
 
 ```python
 #### OUTPUT ####
-Line: 0 
-{
-  "text": "Effect of sleep quality ... epilepsy.",
-  "meta": {
-    "pile_set_name": "PubMed Abstracts"
-  }
-}
-
-Line: 1
-{
-  "text": "LLMops a new GitHub Repository ...",
-  "meta": {
-    "pile_set_name": "Github"
-  }
-}
+dtype: int32 | shape: (8762951,) | total tokens: 8762951
+first 10 token ids: [18610, 286, 3993, 3081, 319, 4088, 11, 4640, 2163, 11]
+decoded back to text:
+'Effect of sleep quality on memory, executive function, and language
+ performance in patients with refractory focal epilepsy ...'
 ```
 
-Now we need to encode (tokenize) our dataset. Our goal is to have an LLM that can at least output proper words. For that, we need to use an already available tokenizer. We will use the tiktoken open-source tokenizer by OpenAI. We will use the r50k_base tokenizer, which is used for the ChatGPT (GPT-3) model, to tokenize our dataset.
+That is the whole idea of tokenization in one output: text in, a flat array of integers out, and the integers decode straight back to the original words.
 
-We need to create a function for this to avoid duplication, as we will be tokenizing both the train and validation datasets.
+### The chat format and loss mask
+
+For everything after pretraining the model has to know who is talking. The `r50k_base` tokenizer has only one special token, so instead of inventing new ones we use plain text role markers that the model simply learns during SFT. A single turn looks like this (see `src/post_training/chat_template.py`):
+
+```
+<|user|>
+{user content}<|endoftext|><|assistant|>
+{assistant content}<|endoftext|>
+```
+
+For math and reasoning we ask the assistant to show its work in a fixed structure, because the reinforcement learning reward later checks the number inside the answer tags:
+
+```
+<think>step by step reasoning ...</think><answer>42</answer>
+```
+
+The important trick is the **loss mask**. When we encode a conversation we also build a 0/1 mask that is 1 only on the assistant tokens (and the `<|endoftext|>` that ends the turn). That way SFT trains the model to write answers, not to parrot the prompt back. Here is the exact code that builds the ids and the aligned mask:
 
 ```python
-def process_files(input_dir, output_file):
-    """
-    Process all .zst files in the specified input directory and save encoded tokens to an HDF5 file.
+def encode_chat(messages, add_generation_prompt=False):
+    ids, mask = [], []
+    for m in messages:
+        role = m["role"]
+        # Role header is always masked out (we never train the model to emit it).
+        header_ids = _encode_ordinary(_header_for(role))
+        ids.extend(header_ids)
+        mask.extend([0] * len(header_ids))
 
-    Args:
-        input_dir (str): Directory containing input .zst files.
-        output_file (str): Path to the output HDF5 file.
-    """
-    with h5py.File(output_file, 'w') as out_f:
-        # Create an expandable dataset named 'tokens' in the HDF5 file
-        dataset = out_f.create_dataset('tokens', (0,), maxshape=(None,), dtype='i')
-        start_index = 0
+        content_ids = _encode_ordinary(m["content"])
+        is_completion = role == "assistant"
+        ids.extend(content_ids)
+        mask.extend([1 if is_completion else 0] * len(content_ids))   # train on assistant only
 
-        # Iterate through all .zst files in the input directory
-        for filename in sorted(os.listdir(input_dir)):
-            if filename.endswith(".jsonl.zst"):
-                in_file = os.path.join(input_dir, filename)
-                print(f"Processing: {in_file}")
-
-                # Open the .zst file for reading
-                with zstd.open(in_file, 'r') as in_f:
-                    # Iterate through each line in the compressed file
-                    for line in tqdm(in_f, desc=f"Processing {filename}"):
-                        # Load the line as JSON
-                        data = json.loads(line)
-
-                        # Append the end-of-text token to the text and encode it
-                        text = data['text'] + "<|endoftext|>"
-                        encoded = enc.encode(text, allowed_special={'<|endoftext|>'})
-                        encoded_len = len(encoded)
-
-                        # Calculate the end index for the new tokens
-                        end_index = start_index + encoded_len
-
-                        # Expand the dataset size and store the encoded tokens
-                        dataset.resize(dataset.shape[0] + encoded_len, axis=0)
-                        dataset[start_index:end_index] = encoded
-
-                        # Update the start index for the next batch of tokens
-                        start_index = end_index
+        ids.append(EOT_ID)                                            # turn terminator
+        mask.append(1 if is_completion else 0)                        # learn to stop
+    return ids, mask
 ```
 
-There are two important points regarding this function:
-
- 1. We are storing the tokenized data in an HDF5 file, which allows us flexibility for quicker data access while training the model.
-
- 2. Appending the `<|endoftext|>` token marks the end of each text sequence, signaling to the model that it has reached the end of a meaningful context, which helps in generating coherent outputs.
-
-Now we can simply encode our train and validation datasets using:
-
-```python
-# Define tokenized data output directories
-out_train_file = "data/train/pile_train.h5"
-out_val_file = "data/val/pile_dev.h5"
-
-# Loading tokenizer of (GPT-3/GPT-2 Model)
-enc = tiktoken.get_encoding('r50k_base')
-
-# Process training data
-process_files(train_dir, out_train_file)
-
-# Process validation data
-process_files(val_dir, out_val_file)
-```
-
-Let’s take a look at the sample of our tokenized data:
-
-```python
- with h5py.File(out_val_file, 'r') as file:
-     # Access the 'tokens' dataset
-     tokens_dataset = file['tokens']
-     
-     # Print the dtype of the dataset
-     print(f"Dtype of 'tokens' dataset: {tokens_dataset.dtype}")
-     
-     # load and print the first few elements of the dataset
-     print("First few elements of the 'tokens' dataset:")
-     print(tokens_dataset[:10])  # First 10 token
-```
-
-The output of the above code is this:
+Here is a real rendered conversation and the verifier reward in action, printed from this repo:
 
 ```python
 #### OUTPUT ####
-Dtype of 'tokens' dataset: int32
+rendered chat:
+<|user|>
+What is 13 + 29?<|endoftext|><|assistant|>
+<think>13 + 29 = 42</think><answer>42</answer><|endoftext|>
 
-First few elements of the 'tokens' dataset:
-[ 2725  6557    83 23105   157   119   229    77  5846  2429]
+extract_answer("<answer>42</answer>")        -> 42.0
+reward_gsm8k("<answer>42</answer>", 42.0)    -> 1.2    # correct AND well formatted
+reward_gsm8k("<answer>7</answer>",  42.0)    -> 0.2    # wrong, but it used the format
 ```
-We have prepared our dataset for training. Now we will code the transformer architecture and look into its theory correspondingly.
 
-### Transformer Overview
+And here is one real packed SFT row, showing how only the assistant tokens are trained (the mask is 1 on 48 of the 512 tokens in this row):
 
-Let’s have a quick look at how a transformer architecture is used to process and understand text. It works by breaking text into smaller pieces called tokens and predicting the next token in the sequence. A transformer has many layers, called transformer blocks, stacked on top of each other, with a final layer at the end to make the prediction.
+```python
+#### OUTPUT ####
+tokens shape: (2131, 512) | loss_mask shape: (2131, 512)
+row 0: trained (mask=1) tokens = 48 / 512
+row 0 decoded:
+  <|user|>
+  What is the world's oldest annual marathon based on the reference text below? ...
+  <|assistant|>
+  The Boston Marathon is the world's oldest annual marathon, beginning on April 19th 1897.
+```
 
-Each transformer block has two main components:
+The data prep scripts for these stages are:
 
-* **Self-Attention Heads**: These figure out which parts of the input are most important for the model to focus on. For example, when processing a sentence, the attention heads can highlight relationships between words, such as how a pronoun relates to the noun it refers to.
+```bash
+python scripts/prepare_sft_data.py          # Alpaca + Dolly + GSM8K  -> sft_packed.h5
+python scripts/prepare_preference_data.py   # HH-RLHF + UltraFeedback -> preferences.jsonl
+python scripts/prepare_rl_prompts.py        # GSM8K + arithmetic      -> rl_prompts.jsonl
+```
 
-* **MLP (Multi-Layer Perceptron)**: This is a simple feed-forward neural network. It takes the information emphasized by the attention heads and processes it further. The MLP has an input layer that receives data from the attention heads, a hidden layer that adds complexity to the processing, and an output layer that passes the results to the next transformer block.
+## Step 2: The Model, Built From Small Pieces
 
-Together, the attention heads act as the “what to think about” part, while the MLP is the “how to think about it” part. Stacking many transformer blocks allows the model to understand complex patterns and relationships in the text, but this is not always guaranteed.
-
-Instead of looking at the original paper diagram, let’s visualize a simpler and easier architecture diagram that we will be coding.
-
-![Transformer Architecture by [Fareed Khan](undefined)](https://cdn-images-1.medium.com/max/11808/1*QXmeA-H52C-p82AwawslbQ.png)
-
-Let’s read through the flow of our architecture that we will be coding:
-
- 1. Input tokens are converted to embeddings and combined with position information.
-
- 2. The model has 64 identical transformer blocks that process data sequentially.
-
- 3. Each block first runs multi-head attention to look at relationships between tokens.
-
- 4. Each block then processes data through an MLP that expands and then compresses the data.
-
- 5. Each step uses residual connections (shortcuts) to help information flow.
-
- 6. Layer normalization is used throughout to stabilize training.
-
- 7. The attention mechanism calculates which tokens should pay attention to each other.
-
- 8. The MLP expands the data to 4x size, applies ReLU, and then compresses it back down.
-
- 9. The model uses 16 attention heads to capture different types of relationships.
-
- 10. The final layer converts the processed data into vocabulary-sized predictions.
-
- 11. The model generates text by repeatedly predicting the next most likely token.
+A Transformer looks scary as one block of code, so we build it from four small pieces and then stack them. Each piece is a tiny `nn.Module`. We start at the bottom.
 
 ### Multi Layer Perceptron (MLP)
 
-MLP is a fundamental building block within the transformer’s feed-forward network. Its role is to introduce non-linearity and learn complex relationships within the embedded representations. When defining an MLP module, an important parameter is n_embed, which defines the dimensionality of the input embedding.
+The MLP is the part of each block that does the per-token "thinking". It takes each token vector, expands it to four times its size, applies a `ReLU`, and squeezes it back down. The expansion gives the layer room to mix features before projecting back.
 
-The MLP typically consists of a hidden linear layer that expands the input dimension by a factor (often 4, which we will use), followed by a non-linear activation function, commonly ReLU. This structure allows our network to learn more complex features. Finally, a projection linear layer maps the expanded representation back to the original embedding dimension. This sequence of transformations enables the MLP to refine the representations learned by the attention mechanism.
-
-![MLP by [Fareed Khan](undefined)](https://cdn-images-1.medium.com/max/4866/1*GXxiLMW4kUXqOEimBA7g0A.png)
+![MLP](images/03_mlp.png)
 
 ```python
-# --- MLP (Multi-Layer Perceptron) Class ---
-
 class MLP(nn.Module):
-    """
-    A simple Multi-Layer Perceptron with one hidden layer.
-
-    This module is used within the Transformer block for feed-forward processing.
-    It expands the input embedding size, applies a ReLU activation, and then projects it back
-    to the original embedding size.
-    """
+    """A simple Multi-Layer Perceptron with one hidden layer."""
     def __init__(self, n_embed):
         super().__init__()
-        self.hidden = nn.Linear(n_embed, 4 * n_embed)  # Linear layer to expand embedding size
-        self.relu = nn.ReLU()                        # ReLU activation function
-        self.proj = nn.Linear(4 * n_embed, n_embed)  # Linear layer to project back to original size
+        self.hidden = nn.Linear(n_embed, 4 * n_embed)   # expand to 4x
+        self.relu = nn.ReLU()                           # non-linearity
+        self.proj = nn.Linear(4 * n_embed, n_embed)     # project back down
 
     def forward(self, x):
-        """
-        Forward pass through the MLP.
-
-        Args:
-            x (torch.Tensor): Input tensor of shape (B, T, C), where B is batch size,
-                              T is sequence length, and C is embedding size.
-
-        Returns:
-            torch.Tensor: Output tensor of the same shape as the input.
-        """
-        x = self.forward_embedding(x)
-        x = self.project_embedding(x)
-        return x
-
-    def forward_embedding(self, x):
-        """
-        Applies the hidden linear layer followed by ReLU activation.
-
-        Args:
-            x (torch.Tensor): Input tensor.
-
-        Returns:
-            torch.Tensor: Output after the hidden layer and ReLU.
-        """
         x = self.relu(self.hidden(x))
-        return x
-
-    def project_embedding(self, x):
-        """
-        Applies the projection linear layer.
-
-        Args:
-            x (torch.Tensor): Input tensor.
-
-        Returns:
-            torch.Tensor: Output after the projection layer.
-        """
         x = self.proj(x)
         return x
 ```
 
-We just coded our MLP part, where the __init__ method initializes a hidden linear layer that expands the input embedding size (n_embed) and a projection layer that reduces it back. ReLU activation is applied after the hidden layer. The forward method defines the data flow through these layers, applying the hidden layer and ReLU via forward_embedding, and the projection layer via project_embedding.
+The `__init__` sets up the two linear layers and the activation. The `forward` runs them in order. Input and output shapes are the same, `(B, T, n_embed)`, so blocks can be stacked without any reshaping. The code is in `src/models/mlp.py`.
 
 ### Single Head Attention
 
-The attention head is the core part of our model. Its purpose is to focus on relevant parts of the input sequence. When defining a Head module, some important parameters are head_size, n_embed, and context_length. The head_size parameter determines the dimensionality of the key, query, and value projections, influencing the representational capacity of the attention mechanism.
+Attention is the part that lets a token look at other tokens. Each head builds three views of the input: a query (what am I looking for), a key (what do I contain), and a value (what I will pass on if chosen). We score every query against every key, scale the scores, hide the future with a causal mask, turn the scores into weights with a softmax, and take a weighted sum of the values.
 
-The input embedding dimension n_embed defines the size of the input to these projection layers. context_length is used to create a causal mask, ensuring that the model only attends to preceding tokens.
-
-Within the Head, linear layers (nn.Linear) for key, query, and value are initialized without bias. A lower triangular matrix (tril) of size context_length x context_length is registered as a buffer to implement causal masking, preventing the attention mechanism from attending to future tokens.
-
-![Single Head Attention by [Fareed Khan](undefined)](https://cdn-images-1.medium.com/max/5470/1*teNwEhicq9ebVURiMS8WkA.png)
+![Single Head Attention](images/04_attention_head.png)
 
 ```python
-# --- Attention Head Class ---
-
 class Head(nn.Module):
-    """
-    A single attention head.
-
-    This module calculates attention scores and applies them to the values.
-    It includes key, query, and value projections, and uses causal masking
-    to prevent attending to future tokens.
-    """
+    """A single attention head with causal masking."""
     def __init__(self, head_size, n_embed, context_length):
         super().__init__()
-        self.key = nn.Linear(n_embed, head_size, bias=False)   # Key projection
-        self.query = nn.Linear(n_embed, head_size, bias=False) # Query projection
-        self.value = nn.Linear(n_embed, head_size, bias=False) # Value projection
-        # Lower triangular matrix for causal masking
+        self.key   = nn.Linear(n_embed, head_size, bias=False)
+        self.query = nn.Linear(n_embed, head_size, bias=False)
+        self.value = nn.Linear(n_embed, head_size, bias=False)
+        # a lower-triangular matrix used to mask out future positions
         self.register_buffer('tril', torch.tril(torch.ones(context_length, context_length)))
 
     def forward(self, x):
-        """
-        Forward pass through the attention head.
-
-        Args:
-            x (torch.Tensor): Input tensor of shape (B, T, C).
-
-        Returns:
-            torch.Tensor: Output tensor after applying attention.
-        """
         B, T, C = x.shape
-        k = self.key(x)     # (B, T, head_size)
-        q = self.query(x)   # (B, T, head_size)
+        k = self.key(x)
+        q = self.query(x)
         scale_factor = 1 / math.sqrt(C)
-        # Calculate attention weights: (B, T, head_size) @ (B, head_size, T) -> (B, T, T)
-        attn_weights = q @ k.transpose(-2, -1) * scale_factor
-        # Apply causal masking
-        attn_weights = attn_weights.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
+        attn_weights = q @ k.transpose(-2, -1) * scale_factor          # (B, T, T) scores
+        attn_weights = attn_weights.masked_fill(self.tril[:T, :T] == 0, float('-inf'))  # no peeking ahead
         attn_weights = F.softmax(attn_weights, dim=-1)
-        v = self.value(x)   # (B, T, head_size)
-        # Apply attention weights to values
-        out = attn_weights @ v # (B, T, T) @ (B, T, head_size) -> (B, T, head_size)
+        v = self.value(x)
+        out = attn_weights @ v                                         # weighted sum of values
         return out
 ```
 
-Our attention head class’s __init__ method initializes linear layers for key, query, and value projections, each projecting the input embedding (n_embed) to head_size. A lower triangular matrix based on context_length is used for causal masking. The forward method calculates attention weights by scaling the dot product of the query and key, applies the causal mask, normalizes the weights using softmax, and computes the weighted sum of the values to produce the attention output.
+The causal mask is what makes this a language model: position `t` can only attend to positions `0..t`, never to the future it is trying to predict. The code is in `src/models/attention.py`.
 
 ### Multi Head Attention
 
-To capture diverse relationships within the input sequence, we are going to use the concept of multi-head attention. The MultiHeadAttention module manages multiple independent attention heads operating in parallel.
+One head learns one kind of relationship. We want many, running in parallel, so the model can track several patterns at once (for example, a pronoun and the noun it refers to). We run `n_head` heads, concatenate their outputs, and pass the result through one more linear layer.
 
-The key parameter here is n_head, which determines the number of parallel attention heads. The input embedding dimension (n_embed) and context_length are also necessary to instantiate the individual attention heads. Each head processes the input independently, projecting it into a lower-dimensional subspace of size n_embed // n_head. By having multiple heads, the model can attend to different aspects of the input simultaneously.
-
-![Multi Head Attention by [Fareed Khan](undefined)](https://cdn-images-1.medium.com/max/6864/1*fa-YjrZdtbpuCLp7An99dg.png)
+![Multi Head Attention](images/05_multi_head_attention.png)
 
 ```python
-# --- Multi-Head Attention Class ---
-
 class MultiHeadAttention(nn.Module):
-    """
-    Multi-Head Attention module.
-
-    This module combines multiple attention heads in parallel. The outputs of each head
-    are concatenated and passed through a final linear projection to form the output.
-    """
     def __init__(self, n_head, n_embed, context_length):
         super().__init__()
-        self.heads = nn.ModuleList([Head(n_embed // n_head, n_embed, context_length) for _ in range(n_head)])
-        self.proj = nn.Linear(n_embed, n_embed)
+        self.heads = nn.ModuleList(
+            [Head(n_embed // n_head, n_embed, context_length) for _ in range(n_head)]
+        )
+        self.proj = nn.Linear(n_embed, n_embed)   # mixes the heads back together
 
     def forward(self, x):
-        """
-        Forward pass through the multi-head attention.
-
-        Args:
-            x (torch.Tensor): Input tensor of shape (B, T, C).
-
-        Returns:
-            torch.Tensor: Output tensor after concatenating the heads and applying the output projection.
-        """
-        # Concatenate the output of each head along the last dimension (C)
-        x = torch.cat([h(x) for h in self.heads], dim=-1)
-        # Apply final linear projection
+        x = torch.cat([h(x) for h in self.heads], dim=-1)   # concat along the feature dim
         x = self.proj(x)
         return x
 ```
 
-Now that we have defined the MultiHeadAttention class, which combines multiple attention heads, the __init__ method initializes a list of Head instances (a total of n_head), each with a head_size of n_embed // n_head, along with a final projection layer. The forward method applies each attention head to the input x, concatenates their outputs along the last dimension, and projects them linearly to merge the information learned by each head.
+Each head works in a smaller subspace of size `n_embed // n_head`, so the concatenation lands right back at `n_embed`. The final projection lets the heads talk to each other.
 
-### Transformer Block
+### The Transformer Block
 
-To create a billion-parameter model, we definitely need a deep architecture. For that, we need to code a transformer block and stack them. The key parameters of a block are n_head, n_embed, and context_length. Each block comprises a multi-head attention layer and a feed-forward network (MLP), with layer normalization applied before each and residual connections after each.
+Now we combine attention and the MLP into one block. The block uses pre-norm residual connections: we normalize, run a sub-layer, and add the result back to the input. The "add back" (the residual) is what lets gradients flow through a deep stack without vanishing.
 
-Layer normalization, parameterized by the embedding dimension n_embed, helps stabilize training. The multi-head attention mechanism, as described before, takes n_head, n_embed, and context_length. The MLP also utilizes the embedding dimension n_embed. These components work together to process the input and learn complex patterns.
-
-![Transformer Block by [Fareed Khan](undefined)](https://cdn-images-1.medium.com/max/6942/1*uLWGajZc6StnQHfZjcb6eA.png)
+![The Transformer Block](images/06_transformer_block.png)
 
 ```python
-# --- Transformer Block Class ---
-
 class Block(nn.Module):
-    """
-    A single Transformer block.
-
-    This block consists of a multi-head attention layer followed by an MLP,
-    with layer normalization and residual connections.
-    """
     def __init__(self, n_head, n_embed, context_length):
         super().__init__()
         self.ln1 = nn.LayerNorm(n_embed)
@@ -769,613 +374,384 @@ class Block(nn.Module):
         self.mlp = MLP(n_embed)
 
     def forward(self, x):
-        """
-        Forward pass through the Transformer block.
-
-        Args:
-            x (torch.Tensor): Input tensor.
-
-        Returns:
-            torch.Tensor: Output tensor after the block.
-        """
-        # Apply multi-head attention with residual connection
-        x = x + self.attn(self.ln1(x))
-        # Apply MLP with residual connection
-        x = x + self.mlp(self.ln2(x))
+        x = x + self.attn(self.ln1(x))   # attention sub-layer + residual
+        x = x + self.mlp(self.ln2(x))    # MLP sub-layer + residual
         return x
-
-    def forward_embedding(self, x):
-        """
-        Forward pass focusing on the embedding and attention parts.
-
-        Args:
-            x (torch.Tensor): Input tensor.
-
-        Returns:
-            tuple: A tuple containing the output after MLP embedding and the residual.
-        """
-        res = x + self.attn(self.ln1(x))
-        x = self.mlp.forward_embedding(self.ln2(res))
-        return x, res
 ```
 
-Our Block class represents a single transformer block. The __init__ method initializes layer normalization layers (ln1, ln2), a MultiHeadAttention module, and an MLP module, all parameterized by n_head, n_embed, and context_length.
+Read `x = x + self.attn(self.ln1(x))` as "look at the other tokens, then add what you learned back onto yourself". The MLP line is the same idea for the per-token thinking. The code is in `src/models/transformer_block.py`.
 
-The forward method implements the block's forward pass, applying layer normalization and multi-head attention with a residual connection, followed by another layer normalization and the MLP, again with a residual connection. The forward_embedding method provides an alternative forward pass focused on the attention and initial MLP embedding stages.
+### The Full Transformer
 
-### The Final Model
+Finally we wrap everything. Token ids become vectors through an embedding table, we add a position embedding so the model knows token order, we run the stack of blocks, normalize one last time, and project to vocabulary-sized scores called logits. If we pass targets, the model also returns the cross-entropy loss.
 
-So far, we have coded small components of the transformer model. Next, we integrate token and position embeddings with a series of transformer blocks to perform sequence-to-sequence tasks. To do that, we need to code several key parameters: n_head, n_embed, context_length, vocab_size, and N_BLOCKS.
-
-vocab_size determines the size of the token embedding layer, mapping each token to a dense vector of size n_embed. The context_length parameter is important for the position embedding layer, which encodes the position of each token in the input sequence, also with dimension n_embed. The number of attention heads (n_head) and the number of blocks (N_BLOCKS) dictate the depth and complexity of the network.
-
-These parameters collectively define the architecture and capacity of the transformer model, so let’s code it.
-
-![Transformer Class by [Fareed Khan](undefined)](https://cdn-images-1.medium.com/max/5418/1*0XXd_R2EOhkKCQDfqUQg0w.png)
+![The Full Transformer](images/07_transformer.png)
 
 ```python
-# --- Transformer Model Class ---
-
 class Transformer(nn.Module):
-    """
-    The main Transformer model.
-
-    This class combines token and position embeddings with a sequence of Transformer blocks
-    and a final linear layer for language modeling.
-    """
     def __init__(self, n_head, n_embed, context_length, vocab_size, N_BLOCKS):
         super().__init__()
-        self.context_length = context_length
-        self.N_BLOCKS = N_BLOCKS
         self.token_embed = nn.Embedding(vocab_size, n_embed)
         self.position_embed = nn.Embedding(context_length, n_embed)
-        self.attn_blocks = nn.ModuleList([Block(n_head, n_embed, context_length) for _ in range(N_BLOCKS)])
+        self.attn_blocks = nn.ModuleList(
+            [Block(n_head, n_embed, context_length) for _ in range(N_BLOCKS)]
+        )
         self.layer_norm = nn.LayerNorm(n_embed)
         self.lm_head = nn.Linear(n_embed, vocab_size)
         self.register_buffer('pos_idxs', torch.arange(context_length))
 
-    def _pre_attn_pass(self, idx):
-        """
-        Combines token and position embeddings.
-
-        Args:
-            idx (torch.Tensor): Input token indices.
-
-        Returns:
-            torch.Tensor: Sum of token and position embeddings.
-        """
-        B, T = idx.shape
-        tok_embedding = self.token_embed(idx)
-        pos_embedding = self.position_embed(self.pos_idxs[:T])
-        return tok_embedding + pos_embedding
-
     def forward(self, idx, targets=None):
-        """
-        Forward pass through the Transformer.
-
-        Args:
-            idx (torch.Tensor): Input token indices.
-            targets (torch.Tensor, optional): Target token indices for loss calculation. Defaults to None.
-
-        Returns:
-            tuple: Logits and loss (if targets are provided).
-        """
-        x = self._pre_attn_pass(idx)
-        for block in self.attn_blocks:
-            x = block(x)
-        x = self.layer_norm(x)
-        logits = self.lm_head(x)
+        x = self.forward_hidden(idx)        # token + position embeddings, then the blocks + final norm
+        logits = self.lm_head(x)            # (B, T, vocab_size)
         loss = None
         if targets is not None:
             B, T, C = logits.shape
-            flat_logits = logits.view(B * T, C)
-            targets = targets.view(B * T).long()
+            # reshape (not view): the target slice is not contiguous, so .view() fails on CPU
+            flat_logits = logits.reshape(B * T, C)
+            targets = targets.reshape(B * T).long()
             loss = F.cross_entropy(flat_logits, targets)
         return logits, loss
-
-    def forward_embedding(self, idx):
-        """
-        Forward pass focusing on the embedding and attention blocks.
-
-        Args:
-            idx (torch.Tensor): Input token indices.
-
-        Returns:
-            tuple: Output after attention blocks and the residual.
-        """
-        x = self._pre_attn_pass(idx)
-        residual = x
-        for block in self.attn_blocks:
-            x, residual = block.forward_embedding(x)
-        return x, residual
-
-    def generate(self, idx, max_new_tokens):
-        """
-        Generates new tokens given a starting sequence.
-
-        Args:
-            idx (torch.Tensor): Initial sequence of token indices.
-            max_new_tokens (int): Number of tokens to generate.
-
-        Returns:
-            torch.Tensor: The extended sequence of tokens.
-        """
-        for _ in range(max_new_tokens):
-            idx_cond = idx[:, -self.context_length:]
-            logits, _ = self(idx_cond)
-            logits = logits[:, -1, :]
-            probs = F.softmax(logits, dim=-1)
-            idx_next = torch.multinomial(probs, num_samples=1)
-            idx = torch.cat((idx, idx_next), dim=1)
-        return idx
 ```
 
-Our Transformer class `__init__` method initializes token and position embedding layers (token_embed, position_embed), a sequence of Block modules (attn_blocks), a final layer normalization layer (layer_norm), and a linear layer for language modeling (lm_head).
+One small detail worth pointing out: we use `.reshape` and not `.view` on the targets. The target batch is a non-contiguous slice of the data, and `.view` refuses to work on that on CPU. `.reshape` handles both cases and is identical in every other way. The full model, including `forward_hidden` (which the reward and value heads reuse later) and `generate`, lives in `src/models/transformer.py`.
 
-The _pre_attn_pass method combines token and position embeddings. The forward method processes the input sequence through the embedding layers and the series of transformer blocks, applies final layer normalization, and generates logits. It also calculates the loss if targets are provided. The forward_embedding method provides an intermediate forward pass up to the output of the attention blocks, and the generate method implements token generation.
-
-### Batch Processing
-
-When we train a deep learning model on big data, we process it in batches due to GPU availability. So, let’s create a get_batch_iterator function, taking the data_path to an HDF5 file, the desired batch_size, the context_length for each sequence, and the device to load the data onto.
-
-The batch_size determines how many sequences are processed in parallel during training, while the context_length specifies the length of each input sequence. The data_path points to the location of the training data.
+When we build the model it prints its parameter count. Here are the three sizes used in this repo:
 
 ```python
-# --- Data Loading Utility --- 
-
-def get_batch_iterator(data_path, batch_size, context_length, device="gpu"):
-    """
-    Creates an iterator for generating batches of data from an HDF5 file.
-
-    Args:
-        data_path (str): Path to the HDF5 file containing tokenized data.
-        batch_size (int): Number of sequences in each batch.
-        context_length (int): Length of each sequence.
-        device (str, optional): Device to load the data onto ('cpu' or 'cuda'). Defaults to "cpu".
-
-    Yields:
-        tuple: A tuple containing input sequences (xb) and target sequences (yb).
-    """
-    # Open the HDF5 file in read mode
-    with h5py.File(data_path, 'r') as hdf5_file:
-        
-        # Extract the dataset of tokenized sequences
-        dataset = hdf5_file['tokens']
-        
-        # Get the total size of the dataset
-        dataset_size = dataset.shape[0]
-        
-        # Calculate the number of examples (sequences) that can be made from the data
-        n_examples = (dataset_size - 1) // context_length
-        
-        # Create an array of indices for examples and shuffle them for randomness
-        example_idxs = np.arange(n_examples)
-        np.random.shuffle(example_idxs)
-        
-        # Initialize epoch counter and example counter
-        epochs = 0
-        counter = 0
-        
-        while True:
-            # Check if the current batch exceeds the number of available examples
-            if counter + batch_size > n_examples:
-                # Shuffle the indices again and reset the counter to 0
-                np.random.shuffle(example_idxs)
-                counter = 0
-                print(f"Finished epoch {epochs}")  # Print epoch number when an epoch finishes
-                epochs += 1  # Increment the epoch counter
-            
-            # Select a batch of random indices to generate sequences
-            random_indices = example_idxs[counter:counter+batch_size] * context_length
-            
-            # Retrieve sequences from the dataset based on the random indices
-            random_samples = torch.tensor(np.array([dataset[idx:idx+context_length+1] for idx in random_indices]))
-            
-            # Separate the input sequences (xb) and target sequences (yb)
-            xb = random_samples[:, :context_length].to(device)  # Input sequence (first half of the random sample)
-            yb = random_samples[:, 1:context_length+1].to(device)  # Target sequence (second half of the random sample)
-            
-            # Increment the counter to move to the next batch
-            counter += batch_size
-            
-            # Yield the input and target sequences as a tuple for the current batch
-            yield xb, yb
-```
-Our get_batch_iterator function handles the loading and batching of training data. It takes data_path, batch_size, context_length, and device as input. The function opens the HDF5 file, shuffles the data, and then enters an infinite loop to generate batches. In each iteration, it selects a random subset of the data to form a batch of input sequences (xb) and their corresponding target sequences (yb).
-
-### Training Parameters
-
-Now that we have coded our model, we need to define the training parameters, such as the number of heads, blocks, and more, along with the data path.
-
-```python
-# --- Configuration ---
-
-# Define vocabulary size and transformer configuration
-VOCAB_SIZE = 50304          # Number of unique tokens in the vocabulary
-CONTEXT_LENGTH = 512        # Maximum sequence length for the model
-N_EMBED = 2048              # Dimension of the embedding space
-N_HEAD = 16                 # Number of attention heads in each transformer block
-N_BLOCKS = 64               # Number of transformer blocks in the model
-
-# Paths to training and development datasets
-TRAIN_PATH = "data/train/pile_val.h5"  # File path for the training dataset
-DEV_PATH = "data/val/pile_val.h5"      # File path for the validation dataset
-
-# Transformer training parameters
-T_BATCH_SIZE = 32          # Number of samples per training batch
-T_CONTEXT_LENGTH = 16      # Context length for training batches
-T_TRAIN_STEPS = 200000     # Total number of training steps
-T_EVAL_STEPS = 1000        # Frequency (in steps) to perform evaluation
-T_EVAL_ITERS = 250         # Number of iterations to evaluate the model
-T_LR_DECAY_STEP = 50000    # Step at which to decay the learning rate
-T_LR = 5e-4                # Initial learning rate for training
-T_LR_DECAYED = 5e-5        # Learning rate after decay
-T_OUT_PATH = "models/transformer_B.pt"  # Path to save the trained model
-
-# Device configuration
-DEVICE = 'cuda'
-
-# Store all configurations in a dictionary for easy access and modification
-default_config = {
-    'vocab_size': VOCAB_SIZE,
-    'context_length': CONTEXT_LENGTH,
-    'n_embed': N_EMBED,
-    'n_head': N_HEAD,
-    'n_blocks': N_BLOCKS,
-    'train_path': TRAIN_PATH,
-    'dev_path': DEV_PATH,
-    't_batch_size': T_BATCH_SIZE,
-    't_context_length': T_CONTEXT_LENGTH,
-    't_train_steps': T_TRAIN_STEPS,
-    't_eval_steps': T_EVAL_STEPS,
-    't_eval_iters': T_EVAL_ITERS,
-    't_lr_decay_step': T_LR_DECAY_STEP,
-    't_lr': T_LR,
-    't_lr_decayed': T_LR_DECAYED,
-    't_out_path': T_OUT_PATH,
-    'device': DEVICE,
-}
-```
-
-For most of the parameters, I have used the most common values and also stored them in a dictionary for easy access. Here, the parameters are for a billion-parameter model. If you want to train a model with millions of parameters, you can reduce the main parameters, which include CONTEXT_LENGTH, N_EMBED, N_HEAD, and N_BLOCKS. However, you can also run the million-parameter model script in my GitHub repository.
-
-### Training the Model
-
-Let's initialize our transformer model and check its total number of parameters.
-```python
-# --- Initialize the Model and Print Parameters --- 
-
-model = Transformer(
-    n_head=config['n_head'],
-    n_embed=config['n_embed'],
-    context_length=config['context_length'],
-    vocab_size=config['vocab_size'],
-    N_BLOCKS=config['n_blocks']
-).to(config['device'])
-
-
-# Print the total number of parameters
-total_params = sum(p.numel() for p in model.parameters())
-print(f"Total number of parameters in the model: {total_params:,}")
-
-
 #### OUTPUT ####
-2,141,346,251
+13M small config (n_embed=128, n_head=8, n_blocks=1):      13,142,656 params
+this tutorial's base (n_embed=512, n_head=8, n_blocks=8):  77,031,552 params
+post-training default (n_embed=1024, n_head=16, n_blocks=24): 406,359,168 params
 ```
 
-Now that we have 2 Billion parameter model, we need to define our Adam optimizer and loss tracking function, which will help us track the progress of our model throughout the training.
+## Step 3: Pretraining the Base Model
+
+Pretraining is the long pole. We read random windows of tokens, ask the model to predict the next token at every position, measure how wrong it was with cross-entropy, and nudge the weights. We repeat that a few thousand times.
+
+![The pretraining loop](images/08_training_loop.png)
+
+The simplest version is the original `scripts/train_transformer.py`, which reads `config/config.py` and trains on one GPU. To train the 13 million parameter model, set these values in `config/config.py`:
 
 ```python
-# --- Optimizer Setup and Loss Tracking --- 
-
-# Set up the AdamW optimizer with the specified learning rate.
-optimizer = torch.optim.AdamW(model.parameters(), lr=config['t_lr'])
-
-# List to track loss values during training.
-losses = []
-
-# Define a window size for averaging recent losses in the training loop.
-AVG_WINDOW = 64
-
-# Helper function to estimate the average loss for training and development data.
-@torch.no_grad()
-def estimate_loss(steps):
-    """
-    Evaluate the model on training and development datasets and calculate average loss.
-
-    Args:
-        steps (int): Number of steps to evaluate.
-
-    Returns:
-        dict: Dictionary containing average losses for 'train' and 'dev' splits.
-    """
-    out = {}
-    model.eval()  # Set the model to evaluation mode.
-
-    for split in ['train', 'dev']:
-        # Select the appropriate data path for the current split.
-        data_path = config['train_path'] if split == 'train' else config['dev_path']
-        
-        # Create a batch iterator for evaluation.
-        batch_iterator_eval = get_batch_iterator(
-            data_path, config['t_batch_size'], config['t_context_length'], device=config['device']
-        )
-        
-        # Initialize a tensor to track loss values for each evaluation step.
-        losses_eval = torch.zeros(steps)
-        for k in range(steps):
-            try:
-                # Fetch a batch and calculate the loss.
-                xb, yb = next(batch_iterator_eval)
-                _, loss = model(xb, yb)
-                losses_eval[k] = loss.item()
-            except StopIteration:
-                # Handle the case where the data iterator ends early.
-                print(f"Warning: Iterator for {split} ended early.")
-                break
-        
-        # Compute the mean loss for the current split.
-        out[split] = losses_eval[:k + 1].mean()
-    
-    model.train()  # Restore the model to training mode.
-    return out
+VOCAB_SIZE = 50304
+CONTEXT_LENGTH = 128
+N_EMBED = 128
+N_HEAD = 8
+N_BLOCKS = 1
 ```
 
-We will now initialize our batch processing function and training loop, which will start our training.
+then run:
+
+```bash
+python scripts/train_transformer.py
+```
+
+For long runs you can save periodic checkpoints and resume after an interruption:
+
+```bash
+python scripts/train_transformer.py --checkpoint-every 1000 --keep-last 3
+python scripts/train_transformer.py --resume latest
+```
+
+If a bigger config does not fit in memory, turn on the opt-in memory savers (all off by default, so default behavior never changes):
+
+```bash
+python scripts/train_transformer.py --amp --grad-checkpointing --grad-accum 8
+```
+
+The bigger, modern path is `scripts/pretrain_base.py`. It is the same recipe with the things you need to train a mid-size base: DistributedDataParallel across GPUs, bf16 autocast, gradient accumulation, a cosine learning-rate schedule with warmup, and periodic checkpoints. One GPU or many, same command shape:
+
+```bash
+# one GPU
+python scripts/pretrain_base.py
+# both GPUs
+torchrun --standalone --nproc_per_node=2 scripts/pretrain_base.py
+```
+
+The core of the loop is small. Each step pulls a batch, runs the forward pass under bf16, scales the loss for gradient accumulation, backpropagates, clips the gradient, and steps the optimizer:
 
 ```python
-# --- Training Loop ---
-
-# Create a batch iterator for the training data.
-batch_iterator = get_batch_iterator(
-  config['train_path'],
-  config['t_batch_size'],
-  config['t_context_length'],
-  device=config['device']
-)
-
-# Create a progress bar to monitor training progress.
-pbar = tqdm(range(config['t_train_steps']))
-for step in pbar:
-  try:
-      # Fetch a batch of input and target data.
-      xb, yb = next(batch_iterator)
-      
-      # Perform a forward pass and compute the loss.
-      _, loss = model(xb, yb)
-      
-      # Record the loss for tracking.
-      losses.append(loss.item())
-      pbar.set_description(f"Train loss: {np.mean(losses[-AVG_WINDOW:]):.4f}")
-      
-      # Backpropagate the loss and update the model parameters.
-      optimizer.zero_grad(set_to_none=True)
-      loss.backward()
-
-      # Clip gradients to prevent exploding gradients.
-      torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-
-      optimizer.step()
-
-      # Periodically evaluate the model on training and development data.
-      if step % config['t_eval_steps'] == 0:
-          train_loss, dev_loss = estimate_loss(config['t_eval_iters']).values()
-          print(f"Step: {step}, Train loss: {train_loss:.4f}, Dev loss: {dev_loss:.4f}")
-
-      # Decay the learning rate at the specified step.
-      if step == config['t_lr_decay_step']:
-          print('Decaying learning rate')
-          for g in optimizer.param_groups:
-              g['lr'] = config['t_lr_decayed']
-  except StopIteration:
-      # Handle the case where the training data iterator ends early.
-      print("Training data iterator finished early.")
-      break
+for micro in range(cfg.grad_accum):
+    xb, yb = next(batch_iter)
+    with amp_autocast(cfg.amp_dtype, ctx.device):
+        _, loss = model(xb, yb)
+        loss = loss / cfg.grad_accum       # so the accumulated gradient is the full-batch mean
+    loss.backward()
+torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip)
+optimizer.step()
 ```
-### Saving the Trained Model
 
-Since our training loop has the ability to handle errors, in case the loop throws any error, it will save our partially trained model to avoid loss. Once the training is complete, we can save our trained model to use it later for inference.
+While it trains it prints the step, the loss, the learning rate, and the throughput, and at eval time it also prints the dev loss and peak GPU memory:
+
+```
+#### OUTPUT ####
+Model parameters: 77,031,552 (~77M) | world_size=2
+Effective batch = 24*4*2 = 192 seqs/step
+step 0    | loss 11.1393 | lr 7.50e-06 | 0 tok/s
+step 20   | loss 8.6159  | lr 1.57e-04 | 148,936 tok/s
+step 100  | loss 6.3108  | lr 6.00e-04 | 150,609 tok/s
+  [eval] step 100  | train 6.2501 | dev 6.1745
+step 500  | loss 4.5317  | lr 5.39e-04 | 137,334 tok/s
+  [eval] step 500  | train 4.7066 | dev 4.6499
+step 1000 | loss 4.0100  | lr 3.48e-04 | 131,348 tok/s
+  [eval] step 1000 | train 4.1200 | dev 4.1419
+step 1500 | loss 3.6483  | lr 1.45e-04 | 123,781 tok/s
+  [eval] step 1500 | train 3.8393 | dev 3.8985
+step 1900 | loss 3.7725  | lr 6.36e-05 | 151,488 tok/s
+  [eval] step 1900 | train 3.7345 | dev 3.7607
+Done. Final checkpoint -> /ephemeral/ckpts/base_pretrained.pt
+```
+
+### The loss curve
+
+Here is the real training and dev loss for the 77 million parameter base I trained for this README on 2x L40 GPUs. The loss starts near `ln(vocab_size)`, which is about 10.8 (the loss of a model that guesses uniformly), and drops as the model learns the statistics of the text:
+
+![Training and validation loss](images/loss_curve.png)
+
+This run started at a loss of **11.14** (just above the uniform-guess line at `ln(50304) = 10.83`) and came down to about **3.73 train / 3.76 dev** after 2000 steps, training at roughly **130,000 to 150,000 tokens per second** across the two L40s. The curve going down is the whole story of pretraining: the model is slowly compressing the patterns of language into its weights.
+
+## Step 4: Generating Text
+
+A trained model predicts a distribution over the next token. To generate, we sample one token from that distribution, append it, and feed the longer sequence back in. We repeat until we have enough tokens.
 
 ```python
-# --- Save Model and Final Evaluation ---
-
-# Perform a final evaluation of the model on training and development datasets.
-train_loss, dev_loss = estimate_loss(200).values()
-
-# Ensure unique model save path in case the file already exists.
-modified_model_out_path = config['t_out_path']
-save_tries = 0
-while os.path.exists(modified_model_out_path):
-    save_tries += 1
-    model_out_name = os.path.splitext(config['t_out_path'])[0]
-    modified_model_out_path = model_out_name + f"_{save_tries}" + ".pt"
-
-# Save the model's state dictionary, optimizer state, and training metadata.
-torch.save(
-    {
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
-        'losses': losses,
-        'train_loss': train_loss,
-        'dev_loss': dev_loss,
-        'steps': len(losses),
-    },
-    modified_model_out_path
-)
-print(f"Saved model to {modified_model_out_path}")
-print(f"Finished training. Train loss: {train_loss:.4f}, Dev loss: {dev_loss:.4f}")
+def generate(self, idx, max_new_tokens):
+    for _ in range(max_new_tokens):
+        idx_cond = idx[:, -self.context_length:]    # never look back further than the context window
+        logits, _ = self(idx_cond)
+        logits = logits[:, -1, :]                   # only the last position matters for the next token
+        probs = F.softmax(logits, dim=-1)
+        idx_next = torch.multinomial(probs, num_samples=1)
+        idx = torch.cat((idx, idx_next), dim=1)
+    return idx
 ```
-The final training loss for the billion-parameter model is 0.2314, and the dev loss is 0.643.
 
-### Training Loss
+Run it from a saved checkpoint:
 
-When I plot the loss of both the million- and billion-parameter models, they look very different.
+```bash
+python scripts/generate_text.py --model_path models/transformer_B.pt --input_text "The" --max_new_tokens 100
+```
 
-![Training Loss Comparison](https://cdn-images-1.medium.com/max/6696/1*8Gl7cEbainB4GRVwL3cc7Q.png)
+The 13 million parameter model already produces real words and roughly correct grammar, which is the encouraging part of starting small.
 
-The billion-parameter model starts with a much higher loss and fluctuates a lot at the beginning. It goes down quickly at first, but then wobbles before becoming smoother. This shows that the bigger model has a harder time finding the right way to learn at the start. It might need more data and careful settings. When the learning rate is lowered (the red line), the loss goes down more steadily, showing that this helps it fine-tune.
+## Step 5: Post-Training, Turning a Base Model Into an Assistant
 
-The million-parameter model’s loss goes down more easily from the start. It doesn’t fluctuate as much as the bigger model. When the learning rate is lowered, it doesn’t change the curve as much. This is likely because the smaller model is simpler to train and finds a good solution faster. The big difference shows how much harder it is to train very large models. They need different methods and maybe more time to learn well.
+A base model can continue text, but it cannot follow instructions or reason on purpose. That takes post-training. The good news is that the model never changes. We reuse the exact same Transformer backbone and only change two things at each stage: the data, and the loss.
 
-We now have our saved model. We can finally use it for inference and see how it generates text. 😓
+![The post-training pipeline](images/00_pipeline.png)
 
-### Generating Text
+The one design idea that makes all of this fit in a small repo is **wrap, do not rewrite**. The educational `Transformer` gains a single extra method, `forward_hidden`, which returns the hidden states right before `lm_head`. The reward head, the value head, and all the log-probability math compose around that one method. Nothing in `src/models/` had to be rewritten.
 
-Let’s create a function to generate text from our saved model, which takes the saved model path and the encoder as inputs and returns the generated text.
+### SFT (Supervised Fine-Tuning)
+
+SFT teaches the base model to answer in the chat format. It is still next-token prediction, with one change: the loss is only counted on the assistant tokens, using the mask we built back in Step 1.
+
+![SFT](images/09_sft.png)
 
 ```python
-def generate_text(model_path, input_text, max_length=512, device="gpu"):
-    """
-    Generate text using a pre-trained model based on the given input text.
+def sft_loss(logits, tokens, loss_mask):
+    logits = logits[:, :-1, :]        # predict token t+1 from position t
+    targets = tokens[:, 1:]
+    mask = loss_mask[:, 1:].to(logits.dtype)
 
-    Args:
-    - model_path (str): Path to the model checkpoint.
-    - device (torch.device): Device to load the model on (e.g., 'cpu' or 'cuda').
-    - input_text (str): The input text to seed the generation.
-    - max_length (int, optional): Maximum length of generated text. Defaults to 512.
-
-    Returns:
-    - str: The generated text.
-    """
-
-    # Load the model checkpoint
-    checkpoint = torch.load(model_path)
-
-    # Initialize the model (you should ensure that the Transformer class is defined elsewhere)
-    model = Transformer().to(device)
-
-    # Load the model's state dictionary
-    model.load_state_dict(checkpoint['model_state_dict'])
-
-    # Load the tokenizer for the GPT model (we use 'r50k_base' for GPT models)
-    enc = tiktoken.get_encoding('r50k_base')
-
-    # Encode the input text along with the end-of-text token
-    input_ids = torch.tensor(
-        enc.encode(input_text, allowed_special={'<|endoftext|>'}),
-        dtype=torch.long
-    )[None, :].to(device)  # Add batch dimension and move to the specified device
-
-    # Generate text with the model using the encoded input
-    with torch.no_grad():
-        # Generate up to 'max_length' tokens of text
-        generated_output = model.generate(input_ids, max_length)
-
-        # Decode the generated tokens back into text
-        generated_text = enc.decode(generated_output[0].tolist())
-
-    return generated_text
+    V = logits.size(-1)
+    ce = F.cross_entropy(logits.reshape(-1, V).float(), targets.reshape(-1).long(), reduction="none")
+    ce = ce.view(targets.shape) * mask          # zero out the prompt positions
+    return ce.sum() / mask.sum().clamp(min=1.0) # average over assistant tokens only
 ```
 
-The transformer we defined earlier needs to be called here to load the architecture, and then we load the saved model as the state in that architecture.
+Prepare the data and train:
 
-Let’s first observe what both the million and billion-parameter models generate without providing any input, and see what they generate randomly.
+```bash
+python scripts/prepare_sft_data.py --context_length 1024
+torchrun --standalone --nproc_per_node=2 scripts/train_sft.py
+```
+
+The loss code is in `src/post_training/sft.py`, the trainer in `scripts/train_sft.py`.
+
+### The Reward Model
+
+To do reinforcement learning we need a number that says how good an answer is. One way to get it is to train a reward model on human preference pairs. We put a small linear head on top of the SFT backbone that reads one scalar off the last real token, and we train it with the Bradley-Terry loss so the chosen answer always scores higher than the rejected one.
+
+![The reward model](images/10_reward_model.png)
 
 ```python
-# Defining the file paths for the pre-trained models
-Billion_model_path = 'models/transformer_B.pt'  # Path to the Billion model
-Million_model_path = 'models/transformer_M.pt'  # Path to the Million model
-
-# Using '<|endoftext|>' as input to the models (acts as a prompt that allows the models to generate text freely)
-input_text = "<|endoftext|>"
-
-# Call the function to generate text based on the input text using the Billion model
-B_output = generate_text(Billion_model_path, input_text)
-
-# Call the function to generate text based on the input text using the Million model
-M_output = generate_text(Million_model_path, input_text)
-
-# Print the output generated by both models
-print(B_output)  # Output from the Billion model
-print(M_output)  # Output from the Million model
+def bradley_terry_loss(chosen_rewards, rejected_rewards):
+    """Mean -log sigmoid(chosen - rejected) over a batch of preference pairs."""
+    return -F.logsigmoid(chosen_rewards - rejected_rewards).mean()
 ```
 
-| **Million Parameter Output** | **Billion Parameter Output** |
-|------------------------------|------------------------------|
-| In 1978, The park was returned to the factory-plate that the public share to the lower of the electronic fence that follow from the Station's cities. The Canal of ancient Western nations were confined to the city spot. The villages were directly linked to cities in China that revolt that the US budget and in Odambinais is uncertain and fortune established in rural areas. | There are two miles east coast from 1037 and 73 million refugees (hypotetus) as the same men and defeated Harvard, and Croft. At right east and West Nile's Mediterranean Sea jets. It was found there a number of parties, blacksmith, musician and boutique hospitality and inspire the strain delivered Canadians have already killed, rural branches with coalition railholder against Abyssy. |
+```bash
+python scripts/prepare_preference_data.py --source both
+torchrun --standalone --nproc_per_node=2 scripts/train_reward.py
+```
 
+The headline metric is preference accuracy, the fraction of held-out pairs where the model scores the chosen answer higher. In this run on 7974 real preference pairs it reached **0.574** (above the 0.5 chance line); with a larger model and more data this climbs toward 0.65 to 0.75.
 
-Both LLMs are able to generate clear and accurate words when the context is short and simple. For example, in the million-parameter output, the phrase **“The villages were directly linked to cities in China”** makes sense and conveys a clear idea. It is easy to understand and logically connects the villages to the cities.
+```
+#### OUTPUT ####
+Reward model from sft.pt | 7974 pairs | total_steps=996
+  [eval] step 250 | test_acc 0.539 | margin 0.006
+  [eval] step 750 | test_acc 0.576 | margin 0.063
+Done RM. test_acc 0.574 margin 0.063 -> reward.pt
+```
 
-However, when the context becomes longer and more complex, the clarity begins to fade. In the billion-parameter output, sentences like **“There are two miles east coast from 1037 and 73 million refugees (hypotetus)”** and **“blacksmith, musician and boutique hospitality and inspire the strain delivered Canadians”** become harder to follow. The ideas seem disjointed, and the sentence structure doesn’t flow naturally. While the words used might still be correct, the overall meaning becomes confusing and unclear.
+The code is in `src/post_training/reward_model.py` and `src/post_training/reward_train.py`.
 
-The positive point is that the 13+ million-parameter LLM also starts generating some kind of meaningful content with correct word spelling. For instance, when I use the subject input text, it starts generating an email for me. Although, obviously, broader text doesn’t provide meaningful results, take a look at the output:
+### DPO, ORPO and KTO
+
+DPO skips the reward model and the RL loop entirely. It works directly on preference pairs by comparing how much more likely the policy makes the chosen answer (relative to a frozen reference copy of the SFT model) than the rejected one.
+
+![DPO](images/11_dpo.png)
 
 ```python
-# Input text
-input_text "Subject: "
-
-# Call the Million parameter Mod
-m_output = generate_text(Million_model_path, input_text)
-
-print(m_output)  # Output from the Million model
-```
-| **Million Parameter LLM Output**                                                                 |
-|--------------------------------------------------------------------------------------------------|
-| Subject: ClickPaper-summary Study for Interview <br>Good morning, I hope this message finds you well, as the sun gently peeks through the clouds, ... |
-
-Our million parameter model gives us the motivation that we can have a very narrow, goal-oriented LLM under 1B in size, while our 1B trained model shows us that the architecture needs to be coded in great depth with proper consideration. Otherwise, it won’t improve training or performance compared to the million-parameter model. It will just overfit the data unless you have a deep architecture for the billion-sized model.
-
-## Post-Training & Alignment (SFT · RM · PPO · DPO · GRPO)
-
-Pretraining gives us a model that can *continue* text. But a base model can't follow instructions or
-reason — that takes **post-training**. So I extended the repo all the way to a modern aligned/reasoning
-model, with every algorithm written from scratch in plain PyTorch (no `trl`, `peft`, or `transformers`),
-trained on **real public datasets** (Alpaca, Dolly, Anthropic HH-RLHF, UltraFeedback, GSM8K), and built
-to run on a single GPU or scale across multiple GPUs with DDP + bf16.
-
-The full journey, `Base → SFT → Reward Model → {PPO, DPO} → GRPO → eval/chat`:
-
-![Post-training pipeline: Base to SFT to RM/DPO to PPO/GRPO](docs/diagrams/README.png)
-
-<details>
-<summary>Mermaid source (live, editable)</summary>
-
-```mermaid
-flowchart TD
-    PILE([The Pile<br/>9.8B tokens]):::data --> PRE{{Pretrain<br/>~400M base}}:::model
-    PRE --> BASE[(base_pretrained.pt)]:::ckpt
-    BASE --> SFT{{SFT<br/>Alpaca · Dolly · GSM8K}}:::model
-    SFT --> SFTCK[(sft.pt)]:::ckpt
-    SFTCK --> RM{{Reward Model<br/>Bradley-Terry}}:::rl
-    SFTCK --> DPO{{DPO / ORPO / KTO}}:::rl
-    RM --> RMCK[(reward.pt)]:::ckpt
-    RMCK -->|reward signal| PPO{{PPO<br/>GAE + clip + KL}}:::rl
-    SFTCK --> PPO
-    SFTCK --> GRPO{{GRPO / RLVR<br/>group-relative}}:::rl
-    PPO --> EVAL([GSM8K eval<br/>+ chat]):::eval
-    DPO --> EVAL
-    GRPO --> EVAL
-    classDef data fill:#d6ffd9,stroke:#27ae60,stroke-width:2px,color:#143d1a;
-    classDef model fill:#ffe8a3,stroke:#d48806,stroke-width:2px,color:#5a3d00;
-    classDef rl fill:#ffd9b3,stroke:#e67e22,stroke-width:2px,color:#6b3500;
-    classDef ckpt fill:#eeeeee,stroke:#555555,stroke-width:2px,color:#222;
-    classDef eval fill:#e8d6ff,stroke:#8e44ad,stroke-width:2px,color:#3d1a5a;
+def dpo_loss(policy_chosen_logps, policy_rejected_logps,
+             ref_chosen_logps, ref_rejected_logps, beta=0.1):
+    pi_logratios = policy_chosen_logps - policy_rejected_logps
+    ref_logratios = ref_chosen_logps - ref_rejected_logps
+    logits = pi_logratios - ref_logratios
+    loss = -F.logsigmoid(beta * logits).mean()
+    return loss, ...
 ```
 
-</details>
+```bash
+torchrun --standalone --nproc_per_node=2 scripts/train_dpo.py --loss_type dpo
+#   --loss_type orpo   reference free, folds SFT and alignment into one stage
+#   --loss_type kto    works from an unpaired desirable / undesirable signal
+```
 
-Each stage has its own deep-dive doc — concept, the hand-drawn diagram, the real code, run commands, and
-what every metric means — under [`docs/`](docs/README.md):
+In this run, DPO reached an implicit-reward accuracy of **0.574** on the held-out pairs (the fraction where the policy prefers the chosen response more than the frozen reference does). All three objectives are in `src/post_training/dpo.py`.
 
-| Stage | What it teaches | Doc |
-|---|---|---|
-| Data handling | how every dataset is downloaded & preprocessed | [docs/01_data_pipeline.md](docs/01_data_pipeline.md) |
-| Pretraining | language (next-token on the Pile), DDP + bf16 | [docs/02_pretraining.md](docs/02_pretraining.md) |
-| SFT | instruction following + `<think>/<answer>` format | [docs/03_sft.md](docs/03_sft.md) |
-| Reward Model | scoring which answer humans prefer (Bradley-Terry) | [docs/04_reward_model.md](docs/04_reward_model.md) |
-| DPO / ORPO / KTO | preference alignment without an RL loop | [docs/05_dpo.md](docs/05_dpo.md) |
-| PPO | classic RLHF: rollout → reward → GAE → clip | [docs/06_ppo.md](docs/06_ppo.md) |
-| GRPO / RLVR | reasoning via verifiable rewards (DeepSeek-R1 style) | [docs/07_grpo.md](docs/07_grpo.md) |
-| Evaluation | GSM8K accuracy across all stages | [docs/08_evaluation.md](docs/08_evaluation.md) |
-| Inference / chat | talk to any checkpoint | [docs/09_inference.md](docs/09_inference.md) |
+### PPO
 
-Start at the [**Post-Training Overview**](docs/README.md), or see [POST_TRAINING.md](POST_TRAINING.md)
-for the condensed command reference. The whole chain runs with `bash scripts/run_posttraining.sh`.
+PPO is the classic RLHF loop. For each prompt the model writes an answer (a rollout), we score it (with the reward model or with a GSM8K answer checker), add a small per-token penalty for drifting away from the reference model, estimate how good each token was with GAE, and take a few clipped gradient steps.
 
-# What’s Next
+![PPO](images/12_ppo.png)
 
-I recommend that you create the 13+ million-parameter model and then start scaling it by adding the next 100 parameters, improving its ability to handle shorter contexts. It’s up to you how many more parameters you want to train for specific tasks. Then, for the remaining parameters under 1B, try fine-tuning the model on domain-specific data, such as writing emails or essays, and see how it generates the text.
+The two load-bearing pieces, the advantage estimate and the clipped policy loss, are short:
+
+```python
+def ppo_policy_loss(new_logp, old_logp, advantages, mask, clip=0.2):
+    ratio = torch.exp(new_logp - old_logp)
+    surr1 = ratio * advantages
+    surr2 = torch.clamp(ratio, 1.0 - clip, 1.0 + clip) * advantages   # the clip keeps the step small
+    loss = -masked_mean(torch.min(surr1, surr2), mask)
+    return loss, ...
+```
+
+```bash
+python scripts/prepare_rl_prompts.py
+torchrun --standalone --nproc_per_node=2 scripts/train_ppo.py --reward_source verifier
+#   --reward_source rm   to use the trained reward model instead of the answer checker
+```
+
+The actor-critic shares the backbone through a small value head (`src/post_training/value_head.py`), and the GAE, clipped policy loss, and clipped value loss are in `src/post_training/ppo.py`.
+
+### GRPO / RLVR
+
+GRPO is the 2025, DeepSeek-R1 style method. It throws away the value network. For each prompt it samples a whole group of answers, scores them with a verifiable reward (did the final number match the gold answer), and uses the group's own mean and standard deviation as the baseline. The advantage of an answer is just how much better it did than its group.
+
+![GRPO](images/13_grpo.png)
+
+```python
+def group_advantages(rewards, group_size, eps=1e-4):
+    r = rewards.view(-1, group_size)
+    mean = r.mean(dim=1, keepdim=True)
+    std = r.std(dim=1, keepdim=True)
+    adv = (r - mean) / (std + eps)     # how much better than the rest of my group
+    return adv.reshape(-1)
+```
+
+```bash
+torchrun --standalone --nproc_per_node=2 scripts/train_grpo.py --group_size 8
+```
+
+A short arithmetic curriculum runs first, so the model gets some non-zero reward to learn from before it faces full GSM8K. The group-relative advantage, the clipped surrogate, and the k3 KL penalty are in `src/post_training/grpo.py`.
+
+## Step 6: Evaluation
+
+The single number that ties all the stages together is greedy GSM8K accuracy. We give the model a math question, let it generate, pull the number out of the `<answer>` tags, and check it against the gold answer.
+
+![Evaluation](images/14_evaluation.png)
+
+```bash
+for s in base_pretrained sft dpo ppo grpo; do
+  python scripts/eval_post_training.py --ckpt models/$s.pt --label $s --limit 200 --append logs/table.jsonl
+done
+python scripts/eval_post_training.py --table logs/table.jsonl
+```
+
+This builds the headline comparison so you can track every stage on one axis, Base, SFT, DPO, PPO, and GRPO, all with the same greedy decoding and the same verifiable reward: parse the number inside the `<answer>` tags and check it against the gold answer. The same command runs on any checkpoint, so you fill in the table for your own run, and the bigger the base model and the more pretraining compute you give it, the higher these scores go.
+
+### What changes after SFT
+
+The clearest effect of SFT is a change in behavior. The base model only knows how to continue text, so when you give it a question it just writes more text. After SFT the model has learned the chat format: it answers inside the `<think>...</think><answer>...</answer>` structure it was trained on, which is exactly the structure the reward model and the RL stages then optimize against. That learned format is the foundation every stage after it builds on. You can talk to any stage's checkpoint with `scripts/chat.py` and watch this directly, which is the next section.
+
+## Step 7: Talking to the Model
+
+`scripts/chat.py` loads any checkpoint, reads the model dimensions from the checkpoint itself, and lets you talk to it. It applies the chat template for instruction models, or treats the base model as raw continuation.
+
+![Inference and chat](images/15_inference.png)
+
+```bash
+# instruction-tuned models
+python scripts/chat.py --ckpt models/sft.pt --prompt "What is 13 + 29?"
+python scripts/chat.py --ckpt models/grpo.pt --prompt "..." --greedy
+# base model, raw continuation
+python scripts/chat.py --ckpt models/base_pretrained.pt --raw --prompt "Once upon a time"
+# interactive, no --prompt
+python scripts/chat.py --ckpt models/sft.pt
+```
+
+Generation reuses the same tested core as training and eval, so what you see in chat is exactly what the RL stages optimized. Sampling is controlled by `--temperature`, `--top_p`, `--top_k`, or `--greedy`. The code is in `src/post_training/inference.py`.
+
+## The Streamlit Control Panel
+
+If you would rather click than type, there is a small control panel that can launch every stage, watch the loss live, run evaluation, and chat with a checkpoint:
+
+```bash
+pip install -e ".[ui]"
+streamlit run ui/app.py
+```
+
+It has one page per stage (Data, Pretrain, SFT, Reward, DPO, PPO, GRPO, Evaluate, Chat), each one a form over the same JSON configs you would edit by hand.
+
+## The Documentation Site
+
+Every stage has a deeper write-up, with the theory, the diagram, the real code, and what each metric means, on the documentation site:
+
+**https://fareedkhan-dev.github.io/train-llm-from-scratch/**
+
+To run it locally:
+
+```bash
+pip install -e ".[docs]"
+mkdocs serve
+```
+
+There is also a Foundations section that explains the ideas this code assumes you know (tokenization, the decoder-only Transformer, attention, objectives, optimization, and generation).
+
+## Run the Whole Thing
+
+Once the base is pretrained and the data is prepared, one script runs the entire post-training chain and prints the across-stages table:
+
+```bash
+bash scripts/run_posttraining.sh            # uses both GPUs via torchrun
+NPROC=1 bash scripts/run_posttraining.sh    # single GPU
+```
+
+For a fast end-to-end check on a tiny model that finishes in seconds, every stage has a smoke config:
+
+```bash
+python tests/test_post_training_smoke.py                          # core math, on CPU
+python scripts/train_sft.py --config configs/smoke/sft.json       # a real (tiny) training run
+```
+
+## What's Next
+
+I recommend you start by training the 13 million parameter model, see it produce sensible words, then scale `n_embed` and `n_blocks` up with the memory flags until you hit your GPU limit. After that, walk the post-training chain one stage at a time and watch the GSM8K number move. Every stage is small enough to read in one sitting, and they all share the same model.
+
+If you want to go deeper on any single stage, the documentation site has a focused page for each one.
 
 <hr>
 
