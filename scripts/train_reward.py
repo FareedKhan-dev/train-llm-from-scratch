@@ -63,7 +63,10 @@ def main():
 
     backbone = load_backbone_from_ckpt(cfg, cfg.sft_ckpt, ctx.device)
     rm = RewardModel(backbone).to(ctx.device)
-    rm = ddp_wrap(rm, ctx)
+    # find_unused_parameters=True: the reward model uses the backbone's forward_hidden + a
+    # reward head and never its lm_head, so lm_head params get no gradient. Without this flag
+    # DDP errors on the first backward.
+    rm = ddp_wrap(rm, ctx, find_unused_parameters=True)
     optimizer = configure_optimizer(unwrap(rm), cfg.lr, cfg.weight_decay)
 
     import json
@@ -114,7 +117,9 @@ def main():
                             metrics={"train_loss": loss.item()})
 
     if ctx.is_main:
-        acc, marg = eval_accuracy(rm, cfg, ctx)
+        # Unwrap for the final eval: other ranks are already at cleanup(), so a collective on
+        # the DDP-wrapped model here would hang (NCCL timeout). The periodic eval runs on all ranks.
+        acc, marg = eval_accuracy(unwrap(rm), cfg, ctx)
         save_stage_ckpt(cfg.out_ckpt, rm, optimizer, stage="reward", cfg=cfg, step=total_steps,
                         metrics={"test_acc": acc, "test_margin": marg})
         print(f"Done RM. test_acc {acc:.3f} margin {marg:.3f} -> {cfg.out_ckpt}")

@@ -58,16 +58,21 @@ def ddp_setup(device: str = "cuda") -> DDPContext:
     return DDPContext(rank=rank, local_rank=local_rank, world_size=world_size, device=dev)
 
 
-def ddp_wrap(model: torch.nn.Module, ctx: DDPContext) -> torch.nn.Module:
+def ddp_wrap(model: torch.nn.Module, ctx: DDPContext, find_unused_parameters: bool = False) -> torch.nn.Module:
     """Wrap a model in DDP when running multi-GPU; return it unchanged otherwise.
 
     Only the *trainable* model should be wrapped. Reference / old-policy / reward models
     carry no gradients and must NOT be wrapped (they are replicated identically per rank).
+
+    Pass ``find_unused_parameters=True`` for a model where some parameters do not receive a
+    gradient on every step (for example the reward model, which uses the backbone's
+    ``forward_hidden`` and a reward head but never its ``lm_head``). Without it, DDP raises
+    a "did not get a gradient" error on the first backward.
     """
     if not ctx.enabled:
         return model
     device_ids = [ctx.local_rank] if ctx.device.startswith("cuda") else None
-    return DDP(model, device_ids=device_ids, find_unused_parameters=False)
+    return DDP(model, device_ids=device_ids, find_unused_parameters=find_unused_parameters)
 
 
 def is_main_process(ctx: DDPContext) -> bool:
