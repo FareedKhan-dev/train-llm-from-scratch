@@ -1,0 +1,17 @@
+flowchart LR
+  T1["raw text<br/>'Once upon a time'"]:::data --> T2["tiktoken<br/>r50k_base"]:::proc
+  T2 --> T3["token ids<br/>[7454, 2402, 257, 640]"]:::store
+  T3 --> T4["append &lt;|endoftext|&gt;<br/>(id 50256)"]:::proc
+  T4 --> T5["fixed windows of<br/>context_length + 1"]:::store
+  T5 --> T6["x = window[:-1]<br/>y = window[1:]"]:::out
+
+  classDef data fill:#cdeccd,stroke:#2e7d32,stroke-width:2px,color:#143d1a;
+  classDef store fill:#cfeee9,stroke:#1f9e8f,stroke-width:2px,color:#0c3a34;
+  classDef proc fill:#cfe3fb,stroke:#1565c0,stroke-width:2px,color:#0d2c52;
+  classDef model fill:#ffe8a3,stroke:#d48806,stroke-width:2px,color:#5a3d00;
+  classDef rl fill:#ffd9b3,stroke:#e67e22,stroke-width:2px,color:#6b3500;
+  classDef loss fill:#ffd4d4,stroke:#c0392b,stroke-width:2px,color:#5c1212;
+  classDef ckpt fill:#ececec,stroke:#666666,stroke-width:2px,color:#222222;
+  classDef eval fill:#e7d6fb,stroke:#8e44ad,stroke-width:2px,color:#3d1a5a;
+  classDef out fill:#e7d6fb,stroke:#7b3fbf,stroke-width:2px,color:#3d1a5a;
+  classDef op fill:#ffffff,stroke:#888888,stroke-width:2px,color:#333333;

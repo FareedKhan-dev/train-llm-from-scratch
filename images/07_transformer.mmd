@@ -1,0 +1,21 @@
+flowchart LR
+  I["token ids  (B, T)"]:::data --> TE["token embedding"]:::proc
+  I --> PE["position embedding"]:::proc
+  TE --> SUM(("+")):::op
+  PE --> SUM
+  SUM --> BLK["N_BLOCKS ×<br/>Transformer Block"]:::model
+  BLK --> LNF["final LayerNorm"]:::proc
+  LNF --> LMH["lm_head<br/>Linear -> vocab_size"]:::proc
+  LMH --> LOG["logits  (B, T, vocab)"]:::out
+  LOG -. targets present .-> CE["cross-entropy loss"]:::loss
+
+  classDef data fill:#cdeccd,stroke:#2e7d32,stroke-width:2px,color:#143d1a;
+  classDef store fill:#cfeee9,stroke:#1f9e8f,stroke-width:2px,color:#0c3a34;
+  classDef proc fill:#cfe3fb,stroke:#1565c0,stroke-width:2px,color:#0d2c52;
+  classDef model fill:#ffe8a3,stroke:#d48806,stroke-width:2px,color:#5a3d00;
+  classDef rl fill:#ffd9b3,stroke:#e67e22,stroke-width:2px,color:#6b3500;
+  classDef loss fill:#ffd4d4,stroke:#c0392b,stroke-width:2px,color:#5c1212;
+  classDef ckpt fill:#ececec,stroke:#666666,stroke-width:2px,color:#222222;
+  classDef eval fill:#e7d6fb,stroke:#8e44ad,stroke-width:2px,color:#3d1a5a;
+  classDef out fill:#e7d6fb,stroke:#7b3fbf,stroke-width:2px,color:#3d1a5a;
+  classDef op fill:#ffffff,stroke:#888888,stroke-width:2px,color:#333333;
