@@ -1,0 +1,15 @@
+{
+  "look": "handDrawn",
+  "theme": "base",
+  "themeVariables": {
+    "fontFamily": "Comic Sans MS, Comic Sans, Chalkboard SE, cursive",
+    "fontSize": "16px",
+    "lineColor": "#3b3b3b",
+    "primaryColor": "#ffe8a3",
+    "primaryBorderColor": "#e8730c",
+    "primaryTextColor": "#1a1a1a",
+    "clusterBkg": "#ffffff",
+    "clusterBorder": "#cccccc"
+  },
+  "flowchart": { "htmlLabels": true, "curve": "basis", "nodeSpacing": 22, "rankSpacing": 55 }
+}

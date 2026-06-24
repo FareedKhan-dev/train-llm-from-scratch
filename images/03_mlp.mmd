@@ -1,0 +1,16 @@
+flowchart LR
+  M1["x  (B, T, n_embed)"]:::data --> M2["Linear<br/>n_embed -> 4 · n_embed"]:::proc
+  M2 --> M3["ReLU"]:::proc
+  M3 --> M4["Linear<br/>4 · n_embed -> n_embed"]:::proc
+  M4 --> M5["out  (B, T, n_embed)"]:::out
+
+  classDef data fill:#cdeccd,stroke:#2e7d32,stroke-width:2px,color:#143d1a;
+  classDef store fill:#cfeee9,stroke:#1f9e8f,stroke-width:2px,color:#0c3a34;
+  classDef proc fill:#cfe3fb,stroke:#1565c0,stroke-width:2px,color:#0d2c52;
+  classDef model fill:#ffe8a3,stroke:#d48806,stroke-width:2px,color:#5a3d00;
+  classDef rl fill:#ffd9b3,stroke:#e67e22,stroke-width:2px,color:#6b3500;
+  classDef loss fill:#ffd4d4,stroke:#c0392b,stroke-width:2px,color:#5c1212;
+  classDef ckpt fill:#ececec,stroke:#666666,stroke-width:2px,color:#222222;
+  classDef eval fill:#e7d6fb,stroke:#8e44ad,stroke-width:2px,color:#3d1a5a;
+  classDef out fill:#e7d6fb,stroke:#7b3fbf,stroke-width:2px,color:#3d1a5a;
+  classDef op fill:#ffffff,stroke:#888888,stroke-width:2px,color:#333333;
