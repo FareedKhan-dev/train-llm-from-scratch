@@ -129,7 +129,9 @@ def main():
                             metrics={"train_loss": loss.item()})
 
     if ctx.is_main:
-        acc, marg = eval_implicit_acc(policy, ref, cfg, ctx)
+        # Unwrap for the final eval: other ranks are already at cleanup(), so a collective on
+        # the DDP-wrapped policy here would hang (NCCL timeout). The periodic eval runs on all ranks.
+        acc, marg = eval_implicit_acc(unwrap(policy), ref, cfg, ctx)
         save_stage_ckpt(cfg.out_ckpt, policy, optimizer, stage=f"dpo_{cfg.loss_type}", cfg=cfg, step=total_steps,
                         metrics={"test_acc": acc, "test_margin": marg})
         print(f"Done DPO[{cfg.loss_type}]. test_acc {acc:.3f} margin {marg:.3f} -> {cfg.out_ckpt}")
