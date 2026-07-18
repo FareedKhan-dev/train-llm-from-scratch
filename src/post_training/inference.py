@@ -27,7 +27,7 @@ def load_model_from_ckpt(ckpt_path: str, device: str, overrides: dict | None = N
         N_BLOCKS=cfg.get("n_blocks", 24),
     )
     state = ck["model_state_dict"] if "model_state_dict" in ck else ck
-    state = {k.removeprefix("module.").removeprefix("transformer."): v for k, v in state.items()}
+    state = _strip_ddp_prefix(state)  # Reuse unified function
     keys = set(model.state_dict().keys())
     model.load_state_dict({k: v for k, v in state.items() if k in keys}, strict=False)
     return model.to(device).eval()

@@ -65,10 +65,13 @@ def build_model_from_config(cfg: Any) -> Transformer:
 
 
 def _strip_ddp_prefix(state_dict: dict) -> dict:
-    """Remove a leading ``module.`` from keys saved by DistributedDataParallel."""
-    if any(k.startswith("module.") for k in state_dict):
-        return {k.removeprefix("module."): v for k, v in state_dict.items()}
-    return state_dict
+    """Remove leading module. (DDP) and _orig_mod. (torch.compile) prefixes."""
+    out = {}
+    for k, v in state_dict.items():
+        while k.startswith("module.") or k.startswith("_orig_mod."):
+            k = k.removeprefix("module.").removeprefix("_orig_mod.")
+        out[k] = v
+    return out
 
 
 def load_backbone_from_ckpt(cfg: Any, ckpt_path: str, device: str) -> Transformer:
