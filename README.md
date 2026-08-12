@@ -41,6 +41,7 @@ Odambinais is uncertain and fortune established in rural areas.
 - [Prerequisites and Training Time](#prerequisites-and-training-time)
 - [Setup](#setup)
 - [Code Structure](#code-structure)
+- [Train a Tiny LLM Without a GPU](#train-a-tiny-llm-without-a-gpu)
 - [Step 1: Preparing the Data](#step-1-preparing-the-data)
 - [Step 2: The Model, Built From Small Pieces](#step-2-the-model-built-from-small-pieces)
   - [Multi Layer Perceptron (MLP)](#multi-layer-perceptron-mlp)
@@ -155,6 +156,74 @@ train-llm-from-scratch/
 ├── docs/                        # the MkDocs site (theory + diagrams)
 ├── images/                      # the diagrams in this README (+ the generator)
 └── pyproject.toml               # pip install -e .
+```
+
+## Train a Tiny LLM Without a GPU
+
+You do not need a powerful GPU to learn how an LLM works! This repository provides a dedicated **CPU / Low-Hardware Student Mode** that allows students to prepare a small dataset, build a tokenizer, understand embeddings and self-attention, and train a fully functional decoder-only Transformer from scratch directly on a standard CPU.
+
+The objective is education and first-principles understanding, not competing with large commercial models.
+
+### Recommended Hardware Requirements
+
+These are recommended/tested hardware requirements, depending on the preset profile you select:
+
+| Preset | Target Params | Recommended CPU / RAM | GPU Required? | Purpose / Focus |
+|---|---|---|---|---|
+| **`tiny`** | ~100K-300K | Core i3+ / 4 GB+ RAM | No (CPU required) | Quick local CPU experiment, verifies installation in seconds. |
+| **`student`** | ~1M-2M | Core i5+ / 4-8 GB RAM | No (CPU recommended) | Main educational configuration. Understand complete training pipeline. |
+| **`small`** | ~5M-6M | 4 to 8-core CPU / 8 GB+ RAM | Optional | Understand actual language-model training. |
+| **`gpu`** | ~13M-77M+ | Multi-core CPU / 16 GB+ RAM | Yes (NVIDIA GPU recommended) | Training larger configurations on free Colab, Kaggle or local GPU. |
+
+*Note: Parameter counts are approximate because embeddings, layer normalization, biases, and other architecture choices affect the final count.*
+
+### Progressive Learning Path
+
+Students can progress naturally through the levels as their interest and hardware capacity grow:
+
+```text
+Tiny Model (CPU) ──> Student Model (CPU) ──> Small Model (CPU/GPU) ──> GPU Model (GPU)
+```
+
+### Quick-Start Guide for Students
+
+Follow these three simple steps to prepare data, train your first model, and generate text completely on your CPU:
+
+#### Step 1: Prepare the Dataset
+We bundle a clean, educational dataset based on the public-domain **Tiny Shakespeare** (under `data/student/`):
+```bash
+python prepare_data.py --input data/student/train.txt --output data/student/train.h5
+python prepare_data.py --input data/student/val.txt --output data/student/val.h5
+```
+
+#### Step 2: Train the Model (with a quick 20-step smoke test)
+You can run a quick CPU check to verify everything works in under 10 seconds:
+```bash
+python train.py --preset tiny --device cpu --steps 20
+```
+
+Once verified, you can run a complete training run on the `tiny` or `student` preset:
+```bash
+# Train the tiny configuration on CPU (1,000 steps)
+python train.py --preset tiny --device cpu
+
+# Train the main student configuration on CPU (2,000 steps)
+python train.py --preset student --device cpu
+```
+
+#### Step 3: Generate Text from your Checkpoint
+Load your trained CPU checkpoint and watch the model generate Shakespearean-style text:
+```bash
+python generate.py --checkpoint checkpoints/tiny.pt --prompt "Before we proceed any further" --tokens 50
+```
+
+### "Build Your Own Tiny LLM" Notebook
+
+To turn your learning into a complete hands-on course, we provide an interactive, step-by-step Jupyter Notebook implementing every major Transformer component (embeddings, self-attention, multi-head attention, transformer block, loss, backpropagation, and training/generation loops) from scratch using explicit, clear PyTorch.
+
+You can find the notebook here:
+```text
+notebooks/build_your_own_tiny_llm.ipynb
 ```
 
 ## Step 1: Preparing the Data
