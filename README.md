@@ -828,4 +828,4 @@ Wanna chat on something? [My Linkedin](https://www.linkedin.com/in/fareed-khan-d
 
 ## Star History
 
-[![](https://api.star-history.com/svg?repos=FareedKhan-dev/train-llm-from-scratch&type=Date)](https://star-history.com/#FareedKhan-dev/train-llm-from-scratch&Date)
+[![](https://star-history.dera.page/svg?repos=FareedKhan-dev/train-llm-from-scratch&type=Date)](https://star-history.dera.page/#FareedKhan-dev/train-llm-from-scratch&Date)
