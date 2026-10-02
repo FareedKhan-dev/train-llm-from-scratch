@@ -3,11 +3,16 @@ GRPO / RLVR on GSM8K (DeepSeek-R1 style), from scratch -- no critic, group-relat
 advantages, verifiable reward.
 
 Per iteration: for each prompt sample a group of G completions, score each with the GSM8K
-verifier, compute group-relative advantages, and update with a token-level clipped
-surrogate + KL-to-reference penalty. An arithmetic warm-up curriculum runs first so the
-policy gets non-zero reward variance before facing full GSM8K.
+verifier, compute group-relative advantages, and update with a clipped surrogate +
+KL-to-reference penalty. An arithmetic warm-up curriculum runs first so the policy gets
+non-zero reward variance before facing full GSM8K.
 
-    python scripts/train_grpo.py
+The 2025 variants are flags (see src/post_training/grpo.py for what each one changes):
+
+    python scripts/train_grpo.py                                            # GRPO (repo default)
+    python scripts/train_grpo.py --adv_norm none --loss_agg seq-mean-token-sum-norm   # Dr. GRPO
+    python scripts/train_grpo.py --clip_high 0.28 --filter_groups true --kl_coef 0    # DAPO
+    python scripts/train_grpo.py --ratio_level sequence --clip 0.0003 --clip_high 0.0004  # GSPO
     torchrun --standalone --nproc_per_node=2 scripts/train_grpo.py
 """
 
@@ -83,12 +88,21 @@ def main():
         responses = [decode(seqs[i, plens[i]:seq_lens[i]].tolist()) for i in range(len(prompts))]
         rewards = torch.tensor([reward_gsm8k(responses[i], golds[i]) for i in range(len(prompts))],
                                device=ctx.device, dtype=torch.float32)
-        adv = group_advantages(rewards, G)
+        adv = group_advantages(rewards, G, scale=cfg.adv_norm)
 
         with torch.no_grad(), amp_autocast(cfg.amp_dtype, ctx.device):
             old_logp, _ = compute_logprobs(policy, seqs, rmask, temperature=cfg.temperature, requires_grad=False)
             ref_logp, _ = compute_logprobs(ref, seqs, rmask, temperature=cfg.temperature, requires_grad=False)
         old_logp, ref_logp = old_logp.float(), ref_logp.float()
+
+        # DAPO dynamic sampling: a group where every answer got the same reward has zero
+        # advantage everywhere, so it only adds the KL term and compute. Its tokens are masked
+        # out of the loss. (Rows are masked, not removed, so every GPU still runs the same
+        # number of backward passes, which DDP requires.)
+        keep = torch.ones(seqs.size(0), dtype=torch.bool, device=ctx.device)
+        if cfg.filter_groups:
+            keep = (rewards.view(-1, G).std(dim=1) > 1e-6).repeat_interleave(G)
+        train_mask = resp & keep[:, None]
 
         policy.train()
         N = seqs.size(0)
@@ -97,10 +111,13 @@ def main():
             perm = torch.randperm(N, device=ctx.device)
             for s in range(0, N, max(1, G)):  # minibatch ~ one group's worth
                 mb = perm[s:s + max(1, G)]
+                if not ctx.enabled and not keep[mb].any():
+                    continue  # nothing to learn from these rows (only safe to skip on a single process)
                 with amp_autocast(cfg.amp_dtype, ctx.device):
                     new_logp, _ = compute_logprobs(policy_ddp, seqs[mb], rmask[mb], temperature=cfg.temperature, requires_grad=True)
-                loss, st = grpo_loss(new_logp.float(), old_logp[mb], ref_logp[mb], adv[mb], resp[mb],
-                                     clip=cfg.clip, kl_coef=cfg.kl_coef)
+                loss, st = grpo_loss(new_logp.float(), old_logp[mb], ref_logp[mb], adv[mb], train_mask[mb],
+                                     clip=cfg.clip, kl_coef=cfg.kl_coef, clip_high=cfg.clip_high,
+                                     loss_agg=cfg.loss_agg, ratio_level=cfg.ratio_level, max_len=cfg.rollout_len)
                 optimizer.zero_grad(set_to_none=True)
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(policy_ddp.parameters(), cfg.grad_clip)

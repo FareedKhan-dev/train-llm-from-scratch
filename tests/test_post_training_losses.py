@@ -1,12 +1,15 @@
-"""The preference-optimization family: DPO, IPO, SimPO and conservative DPO."""
+"""The preference-optimization family (DPO, IPO, SimPO, conservative DPO) and the GRPO variants."""
 
 from __future__ import annotations
+
+import math
 
 import pytest
 import torch
 import torch.nn.functional as F
 
 from src.post_training.dpo import dpo_loss, implicit_accuracy, ipo_loss, simpo_loss
+from src.post_training.grpo import aggregate_token_loss, group_advantages, grpo_loss
 
 
 def _pairs():
@@ -48,3 +51,49 @@ def test_simpo_is_reference_free_and_length_normalized() -> None:
     loss_long, _, _ = simpo_loss(2 * pc, 2 * pr, 2 * n, 2 * n, beta=2.0, gamma=0.5)
     assert torch.allclose(loss, loss_long)
 
+
+def test_group_advantages_std_and_dr_grpo() -> None:
+    r = torch.tensor([1.0, 0.0, 0.0, 0.0, 3.0, 1.0, 2.0, 2.0])
+    std_adv = group_advantages(r, 4)
+    centered = group_advantages(r, 4, scale="none")
+    assert torch.allclose(centered, torch.tensor([0.75, -0.25, -0.25, -0.25, 1.0, -1.0, 0.0, 0.0]))
+    assert torch.allclose(std_adv[:4] * r[:4].std(), centered[:4], atol=1e-3)
+
+
+def test_loss_aggregation_modes() -> None:
+    per_token = torch.tensor([[1.0, 1.0, 1.0, 1.0], [4.0, 0.0, 0.0, 0.0]])
+    mask = torch.tensor([[1, 1, 1, 1], [1, 0, 0, 0]], dtype=torch.bool)
+    assert aggregate_token_loss(per_token, mask, "token-mean").item() == pytest.approx(8 / 5)
+    assert aggregate_token_loss(per_token, mask, "seq-mean-token-mean").item() == pytest.approx((1 + 4) / 2)
+    assert aggregate_token_loss(per_token, mask, "seq-mean-token-sum-norm", max_len=8).item() == pytest.approx((4 / 8 + 4 / 8) / 2)
+
+
+def test_grpo_default_is_unchanged_and_clip_higher_widens_the_range() -> None:
+    torch.manual_seed(0)
+    B, L = 4, 6
+    old = torch.randn(B, L) - 2
+    new = old + 0.25  # ratio = e^0.25 = 1.28 everywhere
+    ref = old.clone()
+    adv = torch.tensor([1.0, -1.0, 2.0, 0.5])
+    mask = torch.ones(B, L, dtype=torch.bool)
+    loss, stats = grpo_loss(new, old, ref, adv, mask, clip=0.2, kl_coef=0.0)
+    ratio = math.exp(0.25)
+    clipped = torch.tensor([min(ratio * a, min(max(ratio, 0.8), 1.2) * a) for a in adv.tolist()])
+    assert loss.item() == pytest.approx(-clipped.mean().item(), rel=1e-5)
+    assert stats["clipfrac"] == pytest.approx(1.0)
+    _, wide = grpo_loss(new, old, ref, adv, mask, clip=0.2, clip_high=0.3, kl_coef=0.0)
+    assert wide["clipfrac"] == pytest.approx(0.0)  # 1.28 < 1.3: inside the clip-higher range
+
+
+def test_gspo_uses_one_ratio_per_answer() -> None:
+    old = torch.zeros(2, 4)
+    new = torch.tensor([[0.1, -0.1, 0.2, -0.2], [0.0, 0.0, 0.0, 0.0]])  # mean log-ratio 0 for both rows
+    mask = torch.ones(2, 4, dtype=torch.bool)
+    adv = torch.tensor([1.0, -1.0])
+    loss, stats = grpo_loss(new, old, old, adv, mask, clip=1e-3, kl_coef=0.0, ratio_level="sequence")
+    assert loss.item() == pytest.approx(0.0, abs=1e-6)  # both sequence ratios are exactly 1
+    assert stats["clipfrac"] == 0.0
+    new.requires_grad_(True)
+    loss, _ = grpo_loss(new, old, old, adv, mask, clip=1e-3, kl_coef=0.0, ratio_level="sequence")
+    loss.backward()
+    assert new.grad is not None and torch.allclose(new.grad[0], torch.full((4,), -0.125))

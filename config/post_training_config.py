@@ -31,6 +31,9 @@ OptimizerName = Literal["adamw", "muon"]
 Schedule = Literal["cosine", "wsd", "linear"]
 PreferenceLoss = Literal["dpo", "ipo", "simpo", "orpo", "kto"]
 RewardSource = Literal["verifier", "rm"]
+AdvantageNorm = Literal["std", "none"]
+LossAggregation = Literal["token-mean", "seq-mean-token-mean", "seq-mean-token-sum-norm"]
+RatioLevel = Literal["token", "sequence"]
 
 
 class ConfigError(ValueError):
@@ -226,8 +229,13 @@ class GRPOConfig(BaseModelConfig):
     temperature: float = 1.0
     top_p: float = 1.0
     grpo_epochs: int = 1
-    clip: float = 0.2
+    clip: float = 0.2                 # lower clip range (and upper, unless clip_high is set)
+    clip_high: float | None = None    # DAPO "clip-higher": a larger upper range, e.g. 0.28
     kl_coef: float = 0.04             # KL(policy || ref) penalty term in the loss
+    adv_norm: AdvantageNorm = "std"   # "none" = Dr. GRPO (no division by the group std)
+    loss_agg: LossAggregation = "token-mean"  # how token losses are averaged, see grpo.py
+    ratio_level: RatioLevel = "token"  # "sequence" = GSPO (one importance ratio per answer)
+    filter_groups: bool = False       # DAPO dynamic sampling: skip groups with no reward spread
     lr: float = 1e-6
     grad_clip: float = 1.0
     eval_every: int = 50
@@ -236,7 +244,7 @@ class GRPOConfig(BaseModelConfig):
     def __post_init__(self) -> None:
         super().__post_init__()
         _check(self.group_size >= 2, "group_size must be at least 2 (the group is the baseline)")
-        _check(self.clip > 0, "clip must be positive")
+        _check(self.clip > 0 and (self.clip_high is None or self.clip_high > 0), "clip ranges must be positive")
 
 
 # Tiny config for fast smoke tests (CPU or a single GPU, seconds not hours).
