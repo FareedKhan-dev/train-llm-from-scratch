@@ -93,5 +93,6 @@ def test_schedules_hit_their_anchor_points() -> None:
     assert wsd_lr(80, **kw) == pytest.approx(1.0)  # still in the stable phase
     assert wsd_lr(99, **kw) == pytest.approx(0.55, abs=0.03)  # halfway through the final 20%
     assert lr_at("wsd", 80, **kw) == wsd_lr(80, **kw)
-    with pytest.raises(ValueError):
+    # A bad name is a ValueError, or a TypeError first when the runtime shape/type checks are on.
+    with pytest.raises((ValueError, TypeError)):
         lr_at("constant", 0, **kw)  # type: ignore[arg-type]
