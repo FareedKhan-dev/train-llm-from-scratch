@@ -1,0 +1,30 @@
+%%{init: {'look':'handDrawn','theme':'base','themeVariables':{'fontFamily':'Comic Sans MS, cursive'}}}%%
+flowchart LR
+    subgraph MHA[multi-head: 4 key/value heads]
+        direction TB
+        x1([x]):::data --> a1[q]:::proc & a2[q]:::proc & a3[q]:::proc & a4[q]:::proc
+        a1 --> b1[(k, v)]:::store
+        a2 --> b2[(k, v)]:::store
+        a3 --> b3[(k, v)]:::store
+        a4 --> b4[(k, v)]:::store
+    end
+    subgraph GQA[grouped-query: 2 key/value heads]
+        direction TB
+        x2([x]):::data --> c1[q]:::proc & c2[q]:::proc & c3[q]:::proc & c4[q]:::proc
+        c1 --> d1[(k, v)]:::store
+        c2 --> d1
+        c3 --> d2[(k, v)]:::store
+        c4 --> d2
+    end
+    subgraph MQA[multi-query: 1 key/value head]
+        direction TB
+        x3([x]):::data --> e1[q]:::proc & e2[q]:::proc & e3[q]:::proc & e4[q]:::proc
+        e1 --> f1[(k, v)]:::store
+        e2 --> f1
+        e3 --> f1
+        e4 --> f1
+    end
+    MHA ~~~ GQA ~~~ MQA
+    classDef data fill:#d6ffd9,stroke:#27ae60,stroke-width:2px,color:#143d1a;
+    classDef proc fill:#d6e8ff,stroke:#2c6fbb,stroke-width:2px,color:#0d2c52;
+    classDef store fill:#cdece8,stroke:#16a085,stroke-width:2px,color:#0a3d33;
