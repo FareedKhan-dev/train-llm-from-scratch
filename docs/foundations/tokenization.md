@@ -26,8 +26,8 @@ flowchart LR
 ```
 
 The original BPE idea is simple: start with small units, repeatedly merge frequent adjacent pairs, and
-end with a fixed vocabulary of reusable pieces. The repo does not train its own tokenizer; it reuses
-`r50k_base`.
+end with a fixed vocabulary of reusable pieces. The pretraining path reuses `r50k_base`; the laptop
+track trains its own small vocabulary, and [BPE from scratch](bpe.md) walks through that code.
 
 ## Pretraining shape: one long token stream
 
