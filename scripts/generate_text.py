@@ -8,6 +8,7 @@ and the window it was trained on. So you only pass the checkpoint path:
     python scripts/generate_text.py --model_path models/tiny.pt
     python scripts/generate_text.py --model_path models/student.pt --input_text "The little dog" \
         --max_new_tokens 200 --temperature 0.7 --top_k 40 --num_samples 3
+    python scripts/generate_text.py --model_path models/tiny.pt --top_k 0 --min_p 0.05   # min-p sampling
     python scripts/generate_text.py --model_path models/tiny.pt --int8   # int8 linear weights
     python scripts/generate_text.py --model_path models/student.pt --draft_model models/tiny.pt
         # speculative decoding: the tiny model guesses, the student model checks
@@ -53,7 +54,8 @@ def load_trained_model(model_path: str, device: str):
 
 
 def generate_text(model_path: str, input_text: str, max_new_tokens: int = 100, device: str = "auto",
-                  temperature: float = 0.8, top_k: int | None = 50) -> str:
+                  temperature: float = 0.8, top_k: int | None = 50, top_p: float | None = None,
+                  min_p: float | None = None) -> str:
     """
     Generates text using a pre-trained Transformer model.
 
@@ -64,6 +66,8 @@ def generate_text(model_path: str, input_text: str, max_new_tokens: int = 100, d
         device (str): "auto", "cuda", "mps" or "cpu".
         temperature (float): Below 1 is safer and more repetitive, above 1 more random.
         top_k (int, optional): Sample only from the k most likely next tokens.
+        top_p (float, optional): Sample from the most likely tokens that add up to this probability.
+        min_p (float, optional): Drop tokens less than min_p times as likely as the top token.
 
     Returns:
         str: The prompt followed by the generated continuation.
@@ -74,7 +78,7 @@ def generate_text(model_path: str, input_text: str, max_new_tokens: int = 100, d
     context = torch.tensor([start_ids], dtype=torch.long, device=device)
     with torch.no_grad():
         out = model.generate(context, max_new_tokens=max_new_tokens, temperature=temperature,
-                             top_k=top_k, context_window=window)
+                             top_k=top_k, top_p=top_p, min_p=min_p, context_window=window)
     return safe_decode(tokenizer, out[0].tolist())
 
 
@@ -85,6 +89,9 @@ def main() -> None:
     parser.add_argument("--max_new_tokens", type=int, default=100, help="Maximum number of new tokens to generate.")
     parser.add_argument("--temperature", type=float, default=0.8, help="Sampling temperature.")
     parser.add_argument("--top_k", type=int, default=50, help="Sample from the k most likely tokens (0 = all).")
+    parser.add_argument("--top_p", type=float, default=None, help="Nucleus sampling: keep tokens up to this total probability.")
+    parser.add_argument("--min_p", type=float, default=None,
+                        help="Keep tokens at least this fraction as likely as the top token, e.g. 0.05.")
     parser.add_argument("--num_samples", type=int, default=1, help="How many continuations to print.")
     parser.add_argument("--device", default="auto", help="auto, cuda, mps or cpu.")
     parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducible samples.")
@@ -119,11 +126,13 @@ def main() -> None:
         if draft is None:
             with torch.no_grad():
                 out = model.generate(context, max_new_tokens=args.max_new_tokens, temperature=args.temperature,
-                                     top_k=args.top_k or None, context_window=window)
+                                     top_k=args.top_k or None, top_p=args.top_p, min_p=args.min_p,
+                                     context_window=window)
             stats = ""
         else:
             out, spec = speculative_generate(model, draft, context, args.max_new_tokens, k=args.draft_k,
                                              temperature=args.temperature, top_k=args.top_k or None,
+                                             top_p=args.top_p, min_p=args.min_p,
                                              target_window=window, draft_window=draft_window)
             stats = (f" ({spec.acceptance_rate:.0%} of the draft's guesses kept, "
                      f"{spec.tokens_per_target_call:.2f} tokens per pass of the big model)")
