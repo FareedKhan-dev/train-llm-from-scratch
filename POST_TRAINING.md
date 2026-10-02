@@ -183,13 +183,19 @@ any external service); pass `--use_wandb true` to also mirror to Weights & Biase
   enforce `prompt + generation ≤ context_length`.
 - **Reward hacking / KL control.** Verifier rewards are correctness-dominant with a small,
   bounded format bonus; a KL-to-reference penalty anchors RL to the SFT policy.
+- **Two architectures, one pipeline.** `"arch": "modern"` in `configs/base.json` switches every
+  stage to the modern decoder (RoPE, RMSNorm, SwiGLU, GQA or MLA, optional MoE); see
+  [docs/modern](docs/modern/README.md). Its rollouts, evaluation and chat decode with a KV cache.
 
 ## Tests
 
 ```bash
 python tests/test_post_training_smoke.py   # core math: log-probs, heads, parsing, masking
+pytest                                     # the whole suite, CPU only
+pytest tests/test_pipeline_e2e.py -s       # every training script, end to end, on generated data
 ```
 
-Each trainer also runs end-to-end on a tiny model in seconds (see the smoke commands used
-during development), and the PPO/GRPO math has standalone unit checks (GAE, clipped losses,
-group advantages, k3 KL).
+The end-to-end test writes a small generated dataset, then runs pretraining, SFT (with LoRA),
+the reward model, DPO and SimPO, PPO, GRPO and chat for a few steps each, with both
+architectures, so a change that breaks a stage or the hand-over between two stages fails in CI. The PPO/GRPO math has standalone unit checks (GAE, clipped losses, group
+advantages, k3 KL, and the Dr. GRPO, DAPO and GSPO variants).

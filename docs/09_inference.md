@@ -80,13 +80,18 @@ python scripts/chat.py --ckpt models/base_pretrained.pt --raw --prompt "Once upo
 python scripts/chat.py --ckpt models/sft.pt
 ```
 
-Sampling controls: `--temperature`, `--top_p`, `--top_k`, or `--greedy` for deterministic argmax. Runs
-on `--device cuda` or `cpu` (both verified).
+Sampling controls: `--temperature`, `--top_p`, `--top_k`, or `--greedy` for deterministic argmax.
+`--device` defaults to `auto` (CUDA, then Apple MPS, then the CPU), and `--int8` stores the linear
+layers' weights as int8, which takes about a quarter of their memory. Modern-architecture
+checkpoints generate with a KV cache, so each new token costs one short forward pass.
 
 ## Sampling knobs, briefly
 
 - **greedy**: reproducible, best for eval / math (`--greedy`).
 - **temperature**: higher = more random; ~`0.7–1.0` for open-ended chat.
 - **top_p / top_k**: nucleus / top-k truncation to cut the long tail of unlikely tokens.
+
+[Inference](modern/inference.md) in the Modern LLM section goes further: min-p sampling, how
+the KV cache works, speculative decoding and int8 weights, with measurements.
 
 That's the full loop: pretrain → align → reason → measure → chat. Back to the [overview](README.md).
