@@ -77,6 +77,9 @@ rewards = torch.tensor([reward_gsm8k(responses[i], golds[i]) for i in range(len(
 adv = group_advantages(rewards, G)
 ```
 
+The 2025 follow-ups to GRPO (Dr. GRPO, DAPO's clip-higher and dynamic sampling, GSPO's
+sequence-level ratio) are flags on this same trainer; see [RL for reasoning](modern/rl_reasoning.md).
+
 ## Run it
 
 ```bash

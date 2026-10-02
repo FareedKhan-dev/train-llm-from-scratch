@@ -80,6 +80,9 @@ torchrun --standalone --nproc_per_node=2 scripts/train_sft.py # both GPUs
 # tune: --lr 1e-5 --epochs 3 --batch_size 16
 ```
 
+To fine-tune only small low-rank adapters instead of every weight, add `--lora_rank 16`; see
+[LoRA](modern/lora.md).
+
 ## What the numbers mean
 
 - **train_loss / ppl**: masked cross-entropy (and its perplexity) over assistant tokens; should drop

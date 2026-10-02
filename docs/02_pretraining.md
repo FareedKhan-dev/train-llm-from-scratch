@@ -44,6 +44,10 @@ The base config lives in [`config/post_training_config.py`](https://github.com/F
 (`BaseModelConfig`): `n_embed=1024, n_head=16, n_blocks=24, context_length=1024` → ~406M params. The
 context length is bumped to 1024 (vs the original 512) so GSM8K reasoning chains fit later.
 
+Set `"arch": "modern"` in `configs/base.json` to pretrain (and post-train) the modern decoder
+instead, and `--optimizer muon --lr_schedule wsd` to try the newer optimizer and schedule. See
+[the modern model](modern/README.md) and [optimizers and schedules](modern/optimizers.md).
+
 ## The training step
 
 The heart of [`pretrain_base.py`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/scripts/pretrain_base.py) is a gradient-accumulation loop under

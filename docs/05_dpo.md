@@ -5,7 +5,8 @@ Direct Preference Optimization is the shortcut around RLHF: instead of training 
 running an RL loop, DPO optimizes the policy *directly* on preference pairs, using a frozen copy of the
 SFT model as a reference anchor. No reward model, no rollouts, no value function: just one clean loss.
 I also implemented two popular variants behind a `--loss_type` flag: **ORPO** (reference-free) and
-**KTO** (works from a desirable/undesirable signal).
+**KTO** (works from a desirable/undesirable signal). IPO, SimPO and conservative DPO are there too;
+[Preference optimization](modern/preference.md) compares all of them.
 
 For the sequence log-probability notation used here, see
 [Objectives, Losses & Perplexity](foundations/objectives.md).
