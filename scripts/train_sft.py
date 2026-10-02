@@ -72,29 +72,38 @@ def main():
     train_it = get_sft_batch_iterator(cfg.data_path, cfg.batch_size, device=ctx.device,
                                       rank=ctx.rank, world_size=ctx.world_size, shuffle=True, infinite=True)
 
-    # Estimate total steps for the cosine schedule from dataset size.
+    # Estimate total steps for the cosine schedule from dataset size. One optimizer step uses
+    # grad_accum micro-batches on every rank.
     import h5py
     with h5py.File(cfg.data_path, "r") as f:
         n_rows = f["tokens"].shape[0]
-    steps_per_epoch = max(1, n_rows // (cfg.batch_size * ctx.world_size))
+    steps_per_epoch = max(1, n_rows // (cfg.batch_size * cfg.grad_accum * ctx.world_size))
     total_steps = cfg.max_steps if cfg.max_steps > 0 else steps_per_epoch * cfg.epochs
     if ctx.is_main:
-        print(f"{n_rows} packed rows | ~{steps_per_epoch} steps/epoch | total_steps={total_steps}")
+        print(f"{n_rows} packed rows | ~{steps_per_epoch} steps/epoch | total_steps={total_steps} | "
+              f"effective batch = {cfg.batch_size}*{cfg.grad_accum}*{ctx.world_size} rows")
 
     model.train()
     t0 = time.perf_counter()
+    epoch = 0
     for step in range(total_steps):
         lr = cosine_lr(step, warmup_steps=cfg.warmup_steps, max_steps=total_steps, lr=cfg.lr, min_lr=cfg.min_lr)
         set_lr(optimizer, lr)
 
-        tokens, mask, epoch = next(train_it)
+        optimizer.zero_grad(set_to_none=True)
+        loss_sum = 0.0
+        for micro in range(cfg.grad_accum):
+            tokens, mask, epoch = next(train_it)
+            # Only sync gradients across GPUs on the last micro-batch.
+            sync = micro == cfg.grad_accum - 1 or not ctx.enabled
+            with (contextlib.nullcontext() if sync else model.no_sync()), amp_autocast(cfg.amp_dtype, ctx.device):
+                logits, _ = model(tokens)
+                loss = sft_loss(logits, tokens, mask) / cfg.grad_accum
+            loss.backward()
+            loss_sum += loss.item()
         if epoch >= cfg.epochs and cfg.max_steps <= 0:
             break
-        optimizer.zero_grad(set_to_none=True)
-        with amp_autocast(cfg.amp_dtype, ctx.device):
-            logits, _ = model(tokens)
-            loss = sft_loss(logits, tokens, mask)
-        loss.backward()
+        loss = torch.tensor(loss_sum)
         torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip)
         optimizer.step()
 
