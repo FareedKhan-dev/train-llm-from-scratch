@@ -46,6 +46,32 @@ def test_training_is_deterministic() -> None:
     assert a.merges == b.merges
 
 
+def _textbook_bpe(text: str, n_merges: int, pattern: str) -> list[tuple[int, int]]:
+    """The slow, obvious algorithm: recount every pair in every chunk after every merge."""
+    import regex
+
+    from src.tokenizer.bpe import _merge
+
+    chunks = [list(c.encode("utf-8")) for c in regex.findall(pattern, text)]
+    merges: list[tuple[int, int]] = []
+    for k in range(n_merges):
+        counts: Counter[tuple[int, int]] = Counter()
+        for ids in chunks:
+            counts.update(zip(ids, ids[1:]))
+        if not counts:
+            break
+        best = min(counts, key=lambda p: (-counts[p], p))  # most frequent; ties go to the smaller pair
+        merges.append(best)
+        chunks = [_merge(ids, best, 256 + k) for ids in chunks]
+    return merges
+
+
+def test_fast_training_learns_the_same_merges_as_the_textbook_algorithm() -> None:
+    text = CORPUS + "naïve café, 日本語 and emoji 🙂🙂 " * 5 + "aaabdaaabac " * 7
+    fast = BPETokenizer.train(text, vocab_size=256 + 150 + 1)
+    assert fast.merges == _textbook_bpe(text, 150, fast.pattern)
+
+
 def test_special_tokens(tok: BPETokenizer) -> None:
     ids = tok.encode("story one<|endoftext|>story two")
     assert ids.count(tok.eot_token) == 1
