@@ -8,6 +8,7 @@ import os
 import streamlit as st
 
 from ui import theme
+from src.device import resolve_device
 from ui.stages import CKPT_DIR
 
 theme.setup_page("Chat", "💬")
@@ -21,7 +22,7 @@ if not ckpts:
 with st.sidebar:
     st.header("Generation")
     ckpt = st.selectbox("Checkpoint", ckpts, index=len(ckpts) - 1)
-    device = st.selectbox("Device", ["cuda", "cpu"], index=0)
+    device = resolve_device(st.selectbox("Device", ["auto", "cpu", "cuda", "mps"], index=0))
     raw = st.toggle("Raw mode (base continuation, no chat template)", value=False)
     greedy = st.toggle("Greedy (deterministic)", value=False)
     temperature = st.slider("Temperature", 0.1, 1.5, 0.8, 0.05, disabled=greedy)

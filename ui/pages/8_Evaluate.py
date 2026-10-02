@@ -8,6 +8,7 @@ import os
 import streamlit as st
 
 from ui import theme
+from src.device import resolve_device
 from ui.stages import CKPT_DIR
 
 theme.setup_page("Evaluate", "📊")
@@ -22,7 +23,7 @@ ckpt = st.selectbox("Checkpoint", ckpts, index=len(ckpts) - 1)
 c1, c2, c3 = st.columns(3)
 limit = c1.slider("Num questions", 5, 200, 20, step=5)
 max_new = c2.slider("Max new tokens", 64, 400, 256, step=32)
-device = c3.selectbox("Device", ["cuda", "cpu"], index=0)
+device = resolve_device(c3.selectbox("Device", ["auto", "cpu", "cuda", "mps"], index=0))
 
 if st.button("▶️ Run GSM8K eval", type="primary"):
     with st.spinner(f"Generating + scoring {limit} GSM8K problems on {device} …"):
