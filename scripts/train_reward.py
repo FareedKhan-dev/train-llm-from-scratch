@@ -27,7 +27,7 @@ from data_loader.preference_dataset import get_preference_iterator
 from src.post_training.cli import parse_config_with_json
 from src.post_training.distributed import ddp_setup, ddp_wrap, cleanup, reduce_scalar
 from src.post_training.logging_utils import MetricsLogger
-from src.post_training.optim import configure_optimizer, cosine_lr
+from src.post_training.optim import configure_optimizer, cosine_lr, set_lr
 from src.post_training.reward_model import RewardModel
 from src.post_training.reward_train import bradley_terry_loss, preference_accuracy, reward_margin
 from src.post_training.utils import amp_autocast, load_backbone_from_ckpt, save_stage_ckpt, set_seed, unwrap
@@ -90,8 +90,7 @@ def main():
     t0 = time.perf_counter()
     for step in range(total_steps):
         lr = cosine_lr(step, warmup_steps=cfg.warmup_steps, max_steps=total_steps, lr=cfg.lr, min_lr=cfg.lr * 0.1)
-        for g in optimizer.param_groups:
-            g["lr"] = lr
+        set_lr(optimizer, lr)
 
         batch = next(train_it)
         cr, rr = _pair_rewards(rm, batch, cfg, ctx)

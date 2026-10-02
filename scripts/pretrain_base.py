@@ -4,13 +4,16 @@ Pretrain the mid-size (~400M) base model from scratch on the Pile HDF5 corpus.
 This is the shared starting checkpoint for every post-training stage. It upgrades the
 original ``train_transformer.py`` recipe with the things needed to actually train a
 mid-size model on 2x H100: DistributedDataParallel, bf16 autocast, gradient accumulation,
-a cosine LR schedule with warmup, weight-decay param groups, and periodic checkpointing.
-The original ``train_transformer.py`` is left untouched.
+an LR schedule with warmup (cosine, WSD or linear), weight-decay param groups, the Muon
+optimizer as an option, and periodic checkpointing. The original ``train_transformer.py``
+is left untouched.
 
 Single GPU:
     python scripts/pretrain_base.py
 Both GPUs:
     torchrun --standalone --nproc_per_node=2 scripts/pretrain_base.py
+The modern architecture with Muon and a warmup-stable-decay schedule:
+    python scripts/pretrain_base.py --arch modern --n_kv_head 4 --optimizer muon --lr_schedule wsd
 
 Override any config field from the CLI, e.g. ``--batch_size 16 --train_steps 50000``.
 """
@@ -35,7 +38,7 @@ from src.checkpoint import load_checkpoint, model_state_from_checkpoint
 from src.post_training.cli import parse_config_with_json
 from src.post_training.distributed import ddp_setup, ddp_wrap, cleanup, reduce_scalar
 from src.post_training.logging_utils import MetricsLogger
-from src.post_training.optim import configure_optimizer, cosine_lr
+from src.optim import build_optimizer, lr_at, set_lr
 from src.post_training.utils import (
     amp_autocast, build_model_from_config, save_stage_ckpt, set_seed, unwrap,
 )
@@ -85,7 +88,7 @@ def main():
         model = torch.compile(model)
     model = ddp_wrap(model, ctx)
 
-    optimizer = configure_optimizer(unwrap(model), cfg.lr, cfg.weight_decay)
+    optimizer = build_optimizer(unwrap(model), cfg.optimizer, cfg.lr, cfg.weight_decay)
     if ck is not None and ck.get("optimizer_state_dict"):
         optimizer.load_state_dict(ck["optimizer_state_dict"])
     del ck
@@ -93,7 +96,8 @@ def main():
     logger = None
     if ctx.is_main:
         n_params = sum(p.numel() for p in unwrap(model).parameters())
-        print(f"Model parameters: {n_params:,} (~{n_params/1e6:.0f}M) | world_size={ctx.world_size}")
+        print(f"Model parameters: {n_params:,} (~{n_params/1e6:.0f}M) | arch={cfg.arch} | "
+              f"optimizer={cfg.optimizer} | schedule={cfg.lr_schedule} | world_size={ctx.world_size}")
         print(f"Effective batch = {cfg.batch_size}*{cfg.grad_accum}*{ctx.world_size} "
               f"= {cfg.batch_size*cfg.grad_accum*ctx.world_size} seqs/step")
         logger = MetricsLogger("pretrain", cfg.log_dir, use_wandb=cfg.use_wandb,
@@ -105,10 +109,9 @@ def main():
     model.train()
     t0 = time.perf_counter()
     for step in range(start_step, cfg.train_steps):
-        lr = cosine_lr(step, warmup_steps=cfg.warmup_steps, max_steps=cfg.train_steps,
-                       lr=cfg.lr, min_lr=cfg.min_lr)
-        for g in optimizer.param_groups:
-            g["lr"] = lr
+        lr = lr_at(cfg.lr_schedule, step, warmup_steps=cfg.warmup_steps, max_steps=cfg.train_steps,
+                   lr=cfg.lr, min_lr=cfg.min_lr)
+        set_lr(optimizer, lr)
 
         optimizer.zero_grad(set_to_none=True)
         accum_loss = 0.0

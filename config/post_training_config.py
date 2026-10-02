@@ -27,6 +27,8 @@ from config.paths import CKPT_DIR, DATA_DIR, LOG_DIR
 Arch = Literal["classic", "modern"]
 AttentionKind = Literal["gqa", "mla"]
 AmpDtype = Literal["bf16", "fp16"]
+OptimizerName = Literal["adamw", "muon"]
+Schedule = Literal["cosine", "wsd", "linear"]
 PreferenceLoss = Literal["dpo", "orpo", "kto"]
 RewardSource = Literal["verifier", "rm"]
 
@@ -97,6 +99,8 @@ class PretrainConfig(BaseModelConfig):
     eval_steps: int = 1_000
     eval_iters: int = 100
     warmup_steps: int = 2_000
+    optimizer: OptimizerName = "adamw"  # "muon" = Muon for weight matrices, AdamW for the rest
+    lr_schedule: Schedule = "cosine"    # cosine | wsd (warmup-stable-decay) | linear (to min_lr)
     lr: float = 3e-4
     min_lr: float = 3e-5
     weight_decay: float = 0.1

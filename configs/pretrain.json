@@ -7,6 +7,8 @@
   "eval_steps": 1000,
   "eval_iters": 100,
   "warmup_steps": 2000,
+  "optimizer": "adamw",
+  "lr_schedule": "cosine",
   "lr": 0.0003,
   "min_lr": 3e-05,
   "weight_decay": 0.1,

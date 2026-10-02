@@ -29,7 +29,7 @@ from data_loader.sft_dataset import get_sft_batch_iterator
 from src.post_training.cli import parse_config_with_json
 from src.post_training.distributed import ddp_setup, ddp_wrap, cleanup, reduce_scalar
 from src.post_training.logging_utils import MetricsLogger
-from src.post_training.optim import configure_optimizer, cosine_lr
+from src.post_training.optim import configure_optimizer, cosine_lr, set_lr
 from src.post_training.sft import sft_loss
 from src.post_training.utils import amp_autocast, load_backbone_from_ckpt, save_stage_ckpt, set_seed, unwrap
 
@@ -85,8 +85,7 @@ def main():
     t0 = time.perf_counter()
     for step in range(total_steps):
         lr = cosine_lr(step, warmup_steps=cfg.warmup_steps, max_steps=total_steps, lr=cfg.lr, min_lr=cfg.min_lr)
-        for g in optimizer.param_groups:
-            g["lr"] = lr
+        set_lr(optimizer, lr)
 
         tokens, mask, epoch = next(train_it)
         if epoch >= cfg.epochs and cfg.max_steps <= 0:
