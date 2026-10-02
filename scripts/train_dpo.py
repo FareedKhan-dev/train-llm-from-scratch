@@ -1,11 +1,14 @@
 """
-Direct Preference Optimization (and ORPO / KTO variants) on preference pairs.
+Direct Preference Optimization and its variants (IPO, SimPO, ORPO, KTO) on preference pairs.
 
 The policy is initialized from the SFT checkpoint; a frozen deep copy of it serves as the
-DPO/KTO reference (ORPO is reference-free). Reports implicit-reward accuracy on held-out
-preferences and GSM8K dev accuracy.
+reference for DPO / IPO / KTO (SimPO and ORPO are reference-free, so no copy is made).
+Reports implicit-reward accuracy on held-out preferences.
 
     python scripts/train_dpo.py --loss_type dpo --beta 0.1
+    python scripts/train_dpo.py --loss_type dpo --label_smoothing 0.1     # conservative DPO
+    python scripts/train_dpo.py --loss_type ipo --beta 0.1
+    python scripts/train_dpo.py --loss_type simpo --beta 2.0 --simpo_gamma 0.5
     torchrun --standalone --nproc_per_node=2 scripts/train_dpo.py
 """
 
@@ -25,13 +28,15 @@ from config.post_training_config import DPOConfig
 from data_loader.preference_dataset import get_preference_iterator
 from src.post_training.cli import parse_config_with_json
 from src.post_training.distributed import ddp_setup, ddp_wrap, cleanup, reduce_scalar
-from src.post_training.dpo import dpo_loss, orpo_loss, kto_loss, implicit_accuracy
+from src.post_training.dpo import dpo_loss, implicit_accuracy, ipo_loss, kto_loss, orpo_loss, simpo_loss
 from src.post_training.logging_utils import MetricsLogger
 from src.post_training.optim import configure_optimizer, cosine_lr, set_lr
 from src.post_training.rollout import sequence_logprobs
 from src.post_training.utils import (
     amp_autocast, load_backbone_from_ckpt, make_frozen_copy, save_stage_ckpt, set_seed, unwrap,
 )
+
+REFERENCE_FREE = {"orpo", "simpo"}
 
 
 def _logps(model, ids, mask, requires_grad):
@@ -49,13 +54,17 @@ def _compute_losses(policy, ref, batch, cfg, ctx):
 
     if cfg.loss_type == "orpo":
         return orpo_loss(pc, pr, ncn, nrn, orpo_lambda=cfg.orpo_lambda)
+    if cfg.loss_type == "simpo":
+        return simpo_loss(pc, pr, ncn, nrn, beta=cfg.beta, gamma=cfg.simpo_gamma, label_smoothing=cfg.label_smoothing)
 
     with torch.no_grad(), amp_autocast(cfg.amp_dtype, ctx.device):
         rsum, _ = _logps(ref, ids, mask, requires_grad=False)
     rc, rr = rsum[:B], rsum[B:]
     if cfg.loss_type == "kto":
         return kto_loss(pc, pr, rc, rr, beta=cfg.beta)
-    return dpo_loss(pc, pr, rc, rr, beta=cfg.beta)
+    if cfg.loss_type == "ipo":
+        return ipo_loss(pc, pr, rc, rr, ncn, nrn, beta=cfg.beta)
+    return dpo_loss(pc, pr, rc, rr, beta=cfg.beta, label_smoothing=cfg.label_smoothing)
 
 
 @torch.no_grad()
@@ -83,7 +92,7 @@ def main():
     set_seed(cfg.seed + ctx.rank)
 
     policy = load_backbone_from_ckpt(cfg, cfg.sft_ckpt, ctx.device)
-    ref = make_frozen_copy(policy, device=ctx.device) if cfg.loss_type != "orpo" else None
+    ref = make_frozen_copy(policy, device=ctx.device) if cfg.loss_type not in REFERENCE_FREE else None
     policy = ddp_wrap(policy, ctx)
     optimizer = configure_optimizer(unwrap(policy), cfg.lr, cfg.weight_decay)
 

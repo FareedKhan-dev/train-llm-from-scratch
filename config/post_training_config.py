@@ -29,7 +29,7 @@ AttentionKind = Literal["gqa", "mla"]
 AmpDtype = Literal["bf16", "fp16"]
 OptimizerName = Literal["adamw", "muon"]
 Schedule = Literal["cosine", "wsd", "linear"]
-PreferenceLoss = Literal["dpo", "orpo", "kto"]
+PreferenceLoss = Literal["dpo", "ipo", "simpo", "orpo", "kto"]
 RewardSource = Literal["verifier", "rm"]
 
 
@@ -161,9 +161,11 @@ class DPOConfig(BaseModelConfig):
     pref_path: str = f"{DATA_DIR}/preferences.jsonl"
     test_path: str = f"{DATA_DIR}/preferences_test.jsonl"
     out_ckpt: str = f"{CKPT_DIR}/dpo.pt"
-    loss_type: PreferenceLoss = "dpo"   # dpo | orpo | kto
+    loss_type: PreferenceLoss = "dpo"   # dpo | ipo | simpo | orpo | kto
     beta: float = 0.1
-    orpo_lambda: float = 1.0           # ORPO odds-ratio weight (loss_type="orpo")
+    label_smoothing: float = 0.0        # > 0 = conservative DPO for noisy preference labels
+    simpo_gamma: float = 0.5            # SimPO target reward margin
+    orpo_lambda: float = 1.0            # ORPO odds-ratio weight (loss_type="orpo")
     batch_size: int = 8
     epochs: int = 1
     eval_steps: int = 200
@@ -177,6 +179,7 @@ class DPOConfig(BaseModelConfig):
     def __post_init__(self) -> None:
         super().__post_init__()
         _check(self.beta > 0, "beta must be positive")
+        _check(0.0 <= self.label_smoothing < 0.5, "label_smoothing must be in [0, 0.5)")
         _check(16 <= self.max_len <= self.context_length, "max_len must be between 16 and context_length")
 
 

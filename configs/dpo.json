@@ -5,6 +5,8 @@
   "out_ckpt": "models/dpo.pt",
   "loss_type": "dpo",
   "beta": 0.1,
+  "label_smoothing": 0.0,
+  "simpo_gamma": 0.5,
   "orpo_lambda": 1.0,
   "batch_size": 8,
   "epochs": 1,
