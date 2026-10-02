@@ -24,10 +24,11 @@ node_modules/
 .coverage
 htmlcov/
 
-# data / model artifacts (datasets, checkpoints and logs are never committed)
-data/
-models/
-logs/
+# data / model artifacts (datasets, checkpoints and logs are never committed).
+# Anchored with a leading slash so src/models/ is NOT ignored.
+/data/
+/models/
+/logs/
 *.h5
 *.pt
 *.jsonl
