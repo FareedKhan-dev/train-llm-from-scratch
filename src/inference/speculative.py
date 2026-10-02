@@ -55,8 +55,8 @@ def _probs(logits: Float[Tensor, "n vocab"], temperature: float, top_k: int | No
     return F.softmax(filter_logits(logits.float(), temperature, top_k), dim=-1)
 
 
-def _logits(model: LanguageModel, idx: Int[Tensor, "1 seq"]) -> Float[Tensor, "1 seq vocab"]:
-    out = model(idx[:, -model.context_length :])
+def _logits(model: LanguageModel, idx: Int[Tensor, "1 seq"], window: int) -> Float[Tensor, "1 visible vocab"]:
+    out = model(idx[:, -window:])
     return out[0] if isinstance(out, tuple) else out
 
 
@@ -72,10 +72,23 @@ def speculative_generate(
     top_k: int | None = None,
     greedy: bool = False,
     generator: torch.Generator | None = None,
+    target_window: int | None = None,
+    draft_window: int | None = None,
 ) -> tuple[Int[Tensor, "1 total"], SpeculativeStats]:
-    """Generate ``max_new_tokens`` tokens after ``idx`` (batch size 1) with draft-then-verify."""
+    """Generate ``max_new_tokens`` tokens after ``idx`` (batch size 1) with draft-then-verify.
+
+    ``target_window`` and ``draft_window`` cap how many recent tokens each model sees, like
+    ``context_window`` in ``model.generate`` (by default each model's full context). Once the
+    text is longer than the target's window, its single verify pass gives the first rows up to
+    ``k`` tokens less history than one-token-at-a-time decoding would, so the match with plain
+    decoding is exact only while the text fits in the window.
+    """
     if idx.size(0) != 1:
         raise ValueError("speculative_generate handles one sequence at a time")
+    t_window = min(target_window or target.context_length, target.context_length)
+    d_window = min(draft_window or draft.context_length, draft.context_length)
+    if t_window <= k:
+        raise ValueError(f"the target window ({t_window}) must be longer than k ({k})")
     stats = SpeculativeStats()
     start = idx.size(1)
     while idx.size(1) - start < max_new_tokens:
@@ -83,7 +96,7 @@ def speculative_generate(
         # 1. The draft proposes n tokens, one at a time, remembering its probabilities q.
         x, guesses, q_rows = idx, [], []
         for _ in range(n):
-            q = _probs(_logits(draft, x)[:, -1, :], temperature, top_k, greedy)
+            q = _probs(_logits(draft, x, d_window)[:, -1, :], temperature, top_k, greedy)
             tok = torch.multinomial(q, 1, generator=generator)
             guesses.append(tok)
             q_rows.append(q[0])
@@ -91,7 +104,7 @@ def speculative_generate(
         stats.proposed += n
 
         # 2. One target pass scores all n guesses, plus the position after them.
-        p_rows = _probs(_logits(target, x)[0, -(n + 1) :, :], temperature, top_k, greedy)
+        p_rows = _probs(_logits(target, x, t_window)[0, -(n + 1) :, :], temperature, top_k, greedy)
         stats.target_calls += 1
 
         # 3. Keep each guess with probability min(1, p / q); stop at the first rejection.

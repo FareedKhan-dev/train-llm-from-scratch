@@ -35,6 +35,28 @@ def test_greedy_speculative_decoding_equals_greedy_target_decoding() -> None:
     assert stats.generated == 20 and stats.target_calls <= 20
 
 
+def test_speculative_decoding_respects_the_trained_window() -> None:
+    """Each model only sees its last `window` tokens; inside the window the result is exact."""
+    target, draft = _classic(0), _classic(1)
+    prompt = torch.tensor([[1, 2, 3]])
+    ours, _ = speculative_generate(target, draft, prompt, 10, k=3, greedy=True, target_window=16, draft_window=5)
+    assert torch.equal(ours, target.generate(prompt, 10, top_k=1, context_window=16))
+
+    seen: dict[str, int] = {}
+
+    def record(name: str):
+        def hook(module: nn.Module, args: tuple[torch.Tensor, ...]) -> None:
+            seen[name] = max(seen.get(name, 0), args[0].size(1))
+        return hook
+
+    target.register_forward_pre_hook(record("target"))
+    draft.register_forward_pre_hook(record("draft"))
+    speculative_generate(target, draft, prompt, 40, k=3, greedy=True, target_window=16, draft_window=5)
+    assert seen == {"target": 16, "draft": 5}
+    with pytest.raises(ValueError, match="longer than k"):
+        speculative_generate(target, draft, prompt, 4, k=8, target_window=8)
+
+
 def test_a_perfect_draft_is_always_accepted() -> None:
     target = _classic(0)
     g = torch.Generator().manual_seed(0)
