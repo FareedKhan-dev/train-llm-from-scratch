@@ -49,10 +49,18 @@ class SpeculativeStats:
         return self.generated / max(1, self.target_calls)
 
 
-def _probs(logits: Float[Tensor, "n vocab"], temperature: float, top_k: int | None, greedy: bool) -> Float[Tensor, "n vocab"]:
+def _probs(
+    logits: Float[Tensor, "n vocab"],
+    temperature: float,
+    top_k: int | None,
+    top_p: float | None,
+    min_p: float | None,
+    greedy: bool,
+) -> Float[Tensor, "n vocab"]:
+    """The distribution to sample from. The exactness guarantee holds for any filter applied to both models."""
     if greedy:
         return F.one_hot(logits.argmax(dim=-1), logits.size(-1)).float()
-    return F.softmax(filter_logits(logits.float(), temperature, top_k), dim=-1)
+    return F.softmax(filter_logits(logits.float(), temperature, top_k, top_p, min_p), dim=-1)
 
 
 def _logits(model: LanguageModel, idx: Int[Tensor, "1 seq"], window: int) -> Float[Tensor, "1 visible vocab"]:
@@ -70,6 +78,8 @@ def speculative_generate(
     k: int = 4,
     temperature: float = 1.0,
     top_k: int | None = None,
+    top_p: float | None = None,
+    min_p: float | None = None,
     greedy: bool = False,
     generator: torch.Generator | None = None,
     target_window: int | None = None,
@@ -96,7 +106,7 @@ def speculative_generate(
         # 1. The draft proposes n tokens, one at a time, remembering its probabilities q.
         x, guesses, q_rows = idx, [], []
         for _ in range(n):
-            q = _probs(_logits(draft, x, d_window)[:, -1, :], temperature, top_k, greedy)
+            q = _probs(_logits(draft, x, d_window)[:, -1, :], temperature, top_k, top_p, min_p, greedy)
             tok = torch.multinomial(q, 1, generator=generator)
             guesses.append(tok)
             q_rows.append(q[0])
@@ -104,7 +114,7 @@ def speculative_generate(
         stats.proposed += n
 
         # 2. One target pass scores all n guesses, plus the position after them.
-        p_rows = _probs(_logits(target, x, t_window)[0, -(n + 1) :, :], temperature, top_k, greedy)
+        p_rows = _probs(_logits(target, x, t_window)[0, -(n + 1) :, :], temperature, top_k, top_p, min_p, greedy)
         stats.target_calls += 1
 
         # 3. Keep each guess with probability min(1, p / q); stop at the first rejection.
