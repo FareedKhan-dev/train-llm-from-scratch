@@ -15,6 +15,8 @@ I implemented a transformer model from scratch using PyTorch, based on the paper
 
 This started as a pretraining tutorial. It now goes all the way from raw text to an aligned, reasoning style model, with every algorithm hand written in plain PyTorch (no `trl`, no `peft`, no `transformers`). The whole journey is one idea repeated: turn text into numbers, predict the next token, then keep changing the data and the loss until the model does what we want.
 
+Next to the original model there is now a modern one, built the way current open models are (rotary positions, RMSNorm, SwiGLU, grouped-query and latent attention, Mixture of Experts, a KV cache), and every stage can train either. The newer training tricks are here too, each written out by hand: the Muon optimizer, LoRA, IPO and SimPO, Dr. GRPO, DAPO and GSPO, speculative decoding and int8 weights.
+
 ![From raw text to an aligned reasoning model](images/00_pipeline.png)
 
 Here is the path we will walk, end to end:
@@ -49,6 +51,7 @@ Odambinais is uncertain and fortune established in rural areas.
   - [Multi Head Attention](#multi-head-attention)
   - [The Transformer Block](#the-transformer-block)
   - [The Full Transformer](#the-full-transformer)
+  - [The Modern Version of the Same Model](#the-modern-version-of-the-same-model)
 - [Step 3: Pretraining the Base Model](#step-3-pretraining-the-base-model)
 - [Step 4: Generating Text](#step-4-generating-text)
 - [Step 5: Post-Training, Turning a Base Model Into an Assistant](#step-5-post-training-turning-a-base-model-into-an-assistant)
@@ -353,14 +356,14 @@ class Head(nn.Module):
         self.key   = nn.Linear(n_embed, head_size, bias=False)
         self.query = nn.Linear(n_embed, head_size, bias=False)
         self.value = nn.Linear(n_embed, head_size, bias=False)
-        # a lower-triangular matrix used to mask out future positions
-        self.register_buffer('tril', torch.tril(torch.ones(context_length, context_length)))
+        # a lower-triangular matrix used to mask out future positions (rebuilt on load, never saved)
+        self.register_buffer('tril', torch.tril(torch.ones(context_length, context_length)), persistent=False)
 
     def forward(self, x):
         B, T, C = x.shape
         k = self.key(x)
         q = self.query(x)
-        scale_factor = 1 / math.sqrt(C)
+        scale_factor = 1 / math.sqrt(k.size(-1))                       # 1 / sqrt(head_size)
         attn_weights = q @ k.transpose(-2, -1) * scale_factor          # (B, T, T) scores
         attn_weights = attn_weights.masked_fill(self.tril[:T, :T] == 0, float('-inf'))  # no peeking ahead
         attn_weights = F.softmax(attn_weights, dim=-1)
@@ -460,6 +463,22 @@ this tutorial's base (n_embed=512, n_head=8, n_blocks=8):  77,031,552 params
 post-training default (n_embed=1024, n_head=16, n_blocks=24): 406,359,168 params
 ```
 
+### The Modern Version of the Same Model
+
+The model above is the 2017 design in its GPT-2 form, and it is the best one to learn from. Every big open model released since 2023 (Llama, Qwen, Gemma, Mistral, DeepSeek) keeps the same skeleton, a stack of pre-norm residual blocks with attention and an MLP, but swaps almost every part inside the block. `src/models/modern/` implements those swaps, one small file per idea:
+
+| Part | This README's model | The modern model |
+|---|---|---|
+| Positions | a learned table added to the embeddings | rotary embeddings (RoPE) inside attention |
+| Normalization | LayerNorm | RMSNorm |
+| MLP | ReLU | SwiGLU |
+| Keys and values | one per query head | shared by groups of heads (GQA), or a small latent (MLA) |
+| Attention | written out by hand | `F.scaled_dot_product_attention` (FlashAttention on GPUs) |
+| Generation | re-runs the whole text for every token | a KV cache: each new token runs alone |
+| MLP size | dense | optional Mixture of Experts |
+
+Every script takes `--arch modern` (or `"arch": "modern"` in the JSON configs), so the whole pipeline, from pretraining to GRPO, can train either one. On the laptop preset, the modern model reaches a dev loss of 2.78 against 3.30 for the classic one, with 42% fewer parameters. The [modern model docs](docs/modern/README.md) explain each change with the math, the code and the reason it was made.
+
 ## Step 3: Pretraining the Base Model
 
 Pretraining is the long pole. We read random windows of tokens, ask the model to predict the next token at every position, measure how wrong it was with cross-entropy, and nudge the weights. We repeat that a few thousand times.
@@ -482,6 +501,13 @@ then run:
 python scripts/train_transformer.py
 ```
 
+Or skip the editing and use a named preset. The presets are in `config/presets.py`, from `tiny` (a laptop) to `3b` (the original default):
+
+```bash
+python scripts/train_transformer.py --preset 13m
+python scripts/train_transformer.py --preset 77m --arch modern
+```
+
 For long runs you can save periodic checkpoints and resume after an interruption:
 
 ```bash
@@ -502,7 +528,11 @@ The bigger, modern path is `scripts/pretrain_base.py`. It is the same recipe wit
 python scripts/pretrain_base.py
 # both GPUs
 torchrun --standalone --nproc_per_node=2 scripts/pretrain_base.py
+# the modern model, with the Muon optimizer and a warmup-stable-decay schedule
+python scripts/pretrain_base.py --arch modern --optimizer muon --lr_schedule wsd
 ```
+
+[Muon](docs/modern/optimizers.md) updates each weight matrix along the nearest orthogonal matrix of its momentum, computed with five Newton-Schulz iterations instead of an SVD. The WSD schedule keeps the learning rate flat and decays it only at the end, so any checkpoint from the flat part can be finished later.
 
 The core of the loop is small. Each step pulls a batch, runs the forward pass under bf16, scales the loss for gradient accumulation, backpropagates, clips the gradient, and steps the optimizer:
 
@@ -535,7 +565,7 @@ step 1500 | loss 3.6483  | lr 1.45e-04 | 123,781 tok/s
   [eval] step 1500 | train 3.8393 | dev 3.8985
 step 1900 | loss 3.7725  | lr 6.36e-05 | 151,488 tok/s
   [eval] step 1900 | train 3.7345 | dev 3.7607
-Done. Final checkpoint -> /ephemeral/ckpts/base_pretrained.pt
+Done. Final checkpoint -> models/base_pretrained.pt
 ```
 
 ### The loss curve
@@ -567,6 +597,17 @@ Run it from a saved checkpoint:
 ```bash
 python scripts/generate_text.py --model_path models/transformer_B.pt --input_text "The" --max_new_tokens 100
 ```
+
+The real `generate` also takes a temperature and top-k, top-p and min-p filters (`--temperature`, `--top_k`, `--top_p`, `--min_p`), and stays inside the window the model was trained on. Two more tricks are one flag away:
+
+```bash
+# speculative decoding: a small draft model guesses 4 tokens, the big model checks them in one pass
+python scripts/generate_text.py --model_path models/student.pt --draft_model models/tiny.pt
+# int8 weights: the linear layers take a quarter of the memory
+python scripts/generate_text.py --model_path models/student.pt --int8
+```
+
+Speculative decoding gives exactly the big model's output distribution, however bad the draft is; a good draft just means fewer passes of the big model. The [inference docs](docs/modern/inference.md) prove it in three lines and measure both tricks.
 
 The 13 million parameter model already produces real words and roughly correct grammar, which is the encouraging part of starting small.
 
@@ -603,7 +644,7 @@ python scripts/prepare_sft_data.py --context_length 1024
 torchrun --standalone --nproc_per_node=2 scripts/train_sft.py
 ```
 
-The loss code is in `src/post_training/sft.py`, the trainer in `scripts/train_sft.py`.
+The loss code is in `src/post_training/sft.py`, the trainer in `scripts/train_sft.py`. To fine-tune only small low-rank adapters instead of every weight, add `--lora_rank 16` ([LoRA](docs/modern/lora.md), written from scratch in `src/models/lora.py`); the adapters are merged back when the checkpoint is saved.
 
 ### The Reward Model
 
@@ -656,7 +697,7 @@ torchrun --standalone --nproc_per_node=2 scripts/train_dpo.py --loss_type dpo
 #   --loss_type kto    works from an unpaired desirable / undesirable signal
 ```
 
-In this run, DPO reached an implicit-reward accuracy of **0.574** on the held-out pairs (the fraction where the policy prefers the chosen response more than the frozen reference does). All three objectives are in `src/post_training/dpo.py`.
+In this run, DPO reached an implicit-reward accuracy of **0.574** on the held-out pairs (the fraction where the policy prefers the chosen response more than the frozen reference does). The same flag also selects IPO (`ipo`), SimPO (`simpo`, no reference model) and conservative DPO for noisy labels (`--label_smoothing 0.1`). All of them are in `src/post_training/dpo.py`, and [this page](docs/modern/preference.md) compares them.
 
 ### PPO
 
@@ -703,6 +744,16 @@ torchrun --standalone --nproc_per_node=2 scripts/train_grpo.py --group_size 8
 ```
 
 A short arithmetic curriculum runs first, so the model gets some non-zero reward to learn from before it faces full GSM8K. The group-relative advantage, the clipped surrogate, and the k3 KL penalty are in `src/post_training/grpo.py`.
+
+In 2025 several groups found small biases in GRPO's details, and each fix is a flag on the same trainer:
+
+```bash
+python scripts/train_grpo.py --adv_norm none --loss_agg seq-mean-token-sum-norm   # Dr. GRPO
+python scripts/train_grpo.py --clip_high 0.28 --filter_groups true --kl_coef 0    # DAPO
+python scripts/train_grpo.py --ratio_level sequence --clip 0.0003 --clip_high 0.0004   # GSPO
+```
+
+[RL for reasoning](docs/modern/rl_reasoning.md) explains what each one changes and why.
 
 ## Step 6: Evaluation
 
