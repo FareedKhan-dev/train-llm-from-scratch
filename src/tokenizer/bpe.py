@@ -28,8 +28,8 @@ import heapq
 import json
 import os
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Sequence
-from typing import Literal
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Any, Literal
 
 import regex
 
@@ -238,11 +238,11 @@ class BPETokenizer:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, object]) -> BPETokenizer:
+    def from_dict(cls, data: Mapping[str, Any]) -> BPETokenizer:
         if data.get("type") != "bpe":
             raise ValueError("not a BPE tokenizer description")
-        merges = [(int(a), int(b)) for a, b in data["merges"]]  # type: ignore[union-attr]
-        specials = [str(t) for t in data.get("special_tokens", [EOT])]  # type: ignore[union-attr]
+        merges = [(int(a), int(b)) for a, b in data["merges"]]
+        specials = [str(t) for t in data.get("special_tokens", [EOT])]
         return cls(merges, special_tokens=specials, pattern=str(data["pattern"]))
 
     def save(self, path: str | os.PathLike[str]) -> None:

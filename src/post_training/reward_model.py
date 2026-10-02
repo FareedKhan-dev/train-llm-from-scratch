@@ -13,7 +13,7 @@ import torch
 import torch.nn as nn
 
 from src.checkpoint import load_checkpoint, model_state_from_checkpoint
-from src.models.transformer import Transformer
+from src.models.factory import LanguageModel
 from src.post_training.utils import build_model_from_config, gather_last
 
 
@@ -33,7 +33,7 @@ def load_reward_model(cfg, ckpt_path: str, device: str) -> "RewardModel":
 class RewardModel(nn.Module):
     """Wrap a :class:`Transformer` and add a scalar reward head (no ``lm_head`` used)."""
 
-    def __init__(self, transformer: Transformer) -> None:
+    def __init__(self, transformer: LanguageModel) -> None:
         super().__init__()
         self.transformer = transformer
         n_embed = transformer.lm_head.in_features

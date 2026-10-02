@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import cast
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -20,6 +22,8 @@ class Transformer(nn.Module):
         vocab_size (int): The size of the vocabulary.
         N_BLOCKS (int): The number of transformer blocks in the model.
     """
+    pos_idxs: torch.Tensor  # positions 0..context_length-1, registered as a buffer in __init__
+
     def __init__(self, n_head: int, n_embed: int, context_length: int, vocab_size: int, N_BLOCKS: int) -> None:
         """
         Initializes the Transformer model.
@@ -87,7 +91,7 @@ class Transformer(nn.Module):
                 x = block(x)
         return self.layer_norm(x)
 
-    def forward(self, idx: torch.Tensor, targets: torch.Tensor = None) -> tuple[torch.Tensor, torch.Tensor | None]:
+    def forward(self, idx: torch.Tensor, targets: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor | None]:
         """
         Forward pass through the Transformer.
 
@@ -127,7 +131,8 @@ class Transformer(nn.Module):
         x = self._pre_attn_pass(idx)
         for block in self.attn_blocks[:-1]:
             x = block(x)
-        return self.attn_blocks[-1].forward_embedding(x)
+        last_block = cast(Block, self.attn_blocks[-1])
+        return last_block.forward_embedding(x)
 
     @torch.no_grad()
     def generate(

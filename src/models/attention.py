@@ -16,6 +16,8 @@ class Head(nn.Module):
         n_embed (int): The dimensionality of the input embedding.
         context_length (int): The maximum length of the input sequence, used for causal masking.
     """
+    tril: torch.Tensor  # the causal mask, registered as a buffer in __init__
+
     def __init__(self, head_size: int, n_embed: int, context_length: int) -> None:
         """
         Initializes the attention head.

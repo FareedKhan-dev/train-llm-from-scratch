@@ -24,7 +24,7 @@ from src.checkpoint import (
     strip_wrapper_prefixes,
     unwrap_model,
 )
-from src.models.factory import build_model
+from src.models.factory import LanguageModel, build_model
 from src.models.transformer import Transformer
 
 
@@ -57,14 +57,14 @@ def _cfg_get(cfg: Any, key: str) -> Any:
     return getattr(cfg, key)
 
 
-def build_model_from_config(cfg: Any) -> Transformer:
+def build_model_from_config(cfg: Any) -> LanguageModel:
     """
     Construct a fresh model from a config carrying the standard keys
     ``n_head, n_embed, context_length, vocab_size, n_blocks`` (plus ``arch`` and the modern
     model's settings, when present). Works with the post-training dataclasses and with the
     legacy ``default_config`` dict.
     """
-    return build_model(cfg)  # type: ignore[return-value]  # either architecture fits the interface
+    return build_model(cfg)
 
 
 # Kept for code that imported the old private name; it now also strips torch.compile's
@@ -72,7 +72,7 @@ def build_model_from_config(cfg: Any) -> Transformer:
 _strip_ddp_prefix = strip_wrapper_prefixes
 
 
-def load_backbone_from_ckpt(cfg: Any, ckpt_path: str, device: str) -> Transformer:
+def load_backbone_from_ckpt(cfg: Any, ckpt_path: str, device: str) -> LanguageModel:
     """
     Build a Transformer from ``cfg`` and load backbone weights from a checkpoint saved
     by the pretraining script or any post-training stage (``model_state_dict`` key).
@@ -139,7 +139,7 @@ def gather_last(values: torch.Tensor, seq_lengths: torch.Tensor) -> torch.Tensor
 # --- Checkpoint I/O ----------------------------------------------------------
 
 def _cfg_to_dict(cfg: Any) -> Any:
-    return asdict(cfg) if is_dataclass(cfg) else cfg
+    return asdict(cfg) if is_dataclass(cfg) and not isinstance(cfg, type) else cfg
 
 
 def save_stage_ckpt(

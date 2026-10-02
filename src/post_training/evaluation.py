@@ -93,7 +93,7 @@ def gsm8k_accuracy(
     responses = batched_generate(model, prompts, max_new_tokens, device=device, greedy=greedy)
 
     correct = 0
-    samples = []
+    samples: list[dict] = []
     for (q, ans), resp in zip(qa_pairs, responses):
         gold = gsm8k_gold_answer(ans)
         ok = is_correct(resp, gold)

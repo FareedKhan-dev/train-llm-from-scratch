@@ -17,13 +17,12 @@ from src.checkpoint import (
     model_config_from_checkpoint,
     model_state_from_checkpoint,
 )
-from src.models.factory import build_model
-from src.models.transformer import Transformer
+from src.models.factory import LanguageModel, build_model
 from src.post_training.chat_template import encode_prompt, get_tokenizer
 from src.post_training.evaluation import batched_generate
 
 
-def load_model_from_ckpt(ckpt_path: str, device: str, overrides: dict | None = None) -> Transformer:
+def load_model_from_ckpt(ckpt_path: str, device: str, overrides: dict | None = None) -> LanguageModel:
     """
     Build a model from the settings stored in a checkpoint and load its weights.
 

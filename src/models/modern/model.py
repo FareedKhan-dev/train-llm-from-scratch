@@ -41,6 +41,9 @@ from src.models.modern.rope import rope_cache
 
 
 class ModernTransformer(nn.Module):
+    rope_cos: Tensor  # rotary tables, registered as non-persistent buffers in __init__
+    rope_sin: Tensor
+
     def __init__(self, config: ModernConfig) -> None:
         super().__init__()
         self.config = config

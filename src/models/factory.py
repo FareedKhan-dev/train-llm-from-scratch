@@ -25,6 +25,10 @@ from src.models.transformer import Transformer
 
 ARCHITECTURES = ("classic", "modern")
 
+# Either architecture. Both expose forward / forward_hidden / lm_head / context_length / generate,
+# which is all the post-training code relies on.
+LanguageModel = Transformer | ModernTransformer
+
 
 def config_as_dict(cfg: Any) -> dict[str, Any]:
     """A plain dict view of a dataclass instance, a mapping, or a namespace."""
@@ -35,7 +39,7 @@ def config_as_dict(cfg: Any) -> dict[str, Any]:
     return dict(vars(cfg))
 
 
-def build_model(cfg: Any) -> nn.Module:
+def build_model(cfg: Any) -> LanguageModel:
     """Construct a fresh, randomly initialized model described by ``cfg``."""
     values = config_as_dict(cfg)
     arch = values.get("arch") or "classic"

@@ -11,7 +11,8 @@ from src.optim.schedules import cosine_lr, linear_lr, lr_at, set_lr, wsd_lr
 
 def adamw_param_groups(model: nn.Module, weight_decay: float) -> list[dict]:
     """Decay the >=2D weight matrices, not biases / norms / 1D params (the standard GPT recipe)."""
-    decay, no_decay = [], []
+    decay: list[nn.Parameter] = []
+    no_decay: list[nn.Parameter] = []
     for p in model.parameters():
         if not p.requires_grad:
             continue

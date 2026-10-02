@@ -51,7 +51,7 @@ def resolve_device(requested: str | None = "auto") -> str:
         return "cpu"
     if req.startswith("xla"):
         if _xla_available():
-            import torch_xla  # type: ignore[import-not-found]  # noqa: F401
+            import torch_xla  # noqa: F401
 
             return "xla"
         warnings.warn("XLA was requested but torch_xla is not installed, using the CPU instead.", stacklevel=2)
@@ -78,13 +78,13 @@ def autocast(device: str, dtype: str | None) -> contextlib.AbstractContextManage
 def sync_step(device: str) -> None:
     """Flush pending work on lazy backends. Needed once per optimizer step on XLA (TPU)."""
     if device_type(device) == "xla":
-        import torch_xla  # type: ignore[import-not-found]
+        import torch_xla
 
         sync = getattr(torch_xla, "sync", None)
         if sync is not None:
             sync()
         else:  # older torch_xla releases
-            import torch_xla.core.xla_model as xm  # type: ignore[import-not-found]
+            import torch_xla.core.xla_model as xm
 
             xm.mark_step()
 
