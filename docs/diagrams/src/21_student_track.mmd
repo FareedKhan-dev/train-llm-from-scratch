@@ -1,0 +1,13 @@
+%%{init: {'look':'handDrawn','theme':'base','themeVariables':{'fontFamily':'Comic Sans MS, cursive'}}}%%
+flowchart LR
+    D([TinyStories<br/>or your own text]):::data --> BPE[train a BPE tokenizer<br/>from scratch, 4096 ids]:::proc
+    BPE --> H[(data/tiny<br/>train.h5, val.h5)]:::store
+    H --> T{{train_transformer.py<br/>--preset tiny / student}}:::model
+    T --> C[(models/tiny.pt<br/>weights + tokenizer)]:::ckpt
+    C --> G([generate_text.py<br/>stories on your laptop]):::eval
+    classDef data fill:#d6ffd9,stroke:#27ae60,stroke-width:2px,color:#143d1a;
+    classDef proc fill:#d6e8ff,stroke:#2c6fbb,stroke-width:2px,color:#0d2c52;
+    classDef store fill:#cdece8,stroke:#16a085,stroke-width:2px,color:#0a3d33;
+    classDef model fill:#ffe8a3,stroke:#d48806,stroke-width:2px,color:#5a3d00;
+    classDef ckpt fill:#eeeeee,stroke:#555,stroke-width:2px,color:#222;
+    classDef eval fill:#e8d6ff,stroke:#8e44ad,stroke-width:2px,color:#3d1a5a;

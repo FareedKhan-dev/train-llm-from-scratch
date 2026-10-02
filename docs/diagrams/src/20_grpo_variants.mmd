@@ -1,0 +1,18 @@
+%%{init: {'look':'handDrawn','theme':'base','themeVariables':{'fontFamily':'Comic Sans MS, cursive'}}}%%
+flowchart LR
+    P([prompt]):::data --> G{{sample a group<br/>of G answers}}:::model
+    G --> V[verifier reward<br/>per answer]:::rl
+    V --> F{same reward<br/>for all G?}:::rl
+    F -->|yes, DAPO: skip the group| SKIP[masked out<br/>of the loss]:::ckpt
+    F -->|no| A[advantage = r - mean<br/>GRPO also divides by std<br/>Dr. GRPO does not]:::proc
+    A --> R[importance ratio<br/>per token: GRPO, DAPO<br/>per answer: GSPO]:::proc
+    R --> C[clip the ratio<br/>DAPO: wider upper bound]:::proc
+    C --> L[average the token terms<br/>per answer: GRPO<br/>over all tokens: DAPO<br/>sum / budget: Dr. GRPO]:::loss
+    L --> U{{policy update}}:::model
+    U -. next prompts .-> P
+    classDef data fill:#d6ffd9,stroke:#27ae60,stroke-width:2px,color:#143d1a;
+    classDef proc fill:#d6e8ff,stroke:#2c6fbb,stroke-width:2px,color:#0d2c52;
+    classDef model fill:#ffe8a3,stroke:#d48806,stroke-width:2px,color:#5a3d00;
+    classDef rl fill:#ffd9b3,stroke:#e67e22,stroke-width:2px,color:#6b3500;
+    classDef loss fill:#ffd6d6,stroke:#c0392b,stroke-width:2px,color:#5c1212;
+    classDef ckpt fill:#eeeeee,stroke:#555,stroke-width:2px,color:#222;

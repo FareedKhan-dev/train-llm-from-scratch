@@ -1,0 +1,15 @@
+%%{init: {'look':'handDrawn','theme':'base','themeVariables':{'fontFamily':'Comic Sans MS, cursive'}}}%%
+flowchart LR
+    X([x, size d_in]):::data --> W[frozen weight W<br/>d_out x d_in]:::ckpt
+    X --> A[A: r x d_in<br/>trainable, random init]:::rl
+    A --> B[B: d_out x r<br/>trainable, starts at 0]:::rl
+    B --> S[times alpha / r]:::proc
+    W --> SUM((+)):::proc
+    S --> SUM
+    SUM --> Y([y]):::data
+    SUM -. after training .-> M[merge: W + alpha/r x B A<br/>one plain matrix again]:::model
+    classDef data fill:#d6ffd9,stroke:#27ae60,stroke-width:2px,color:#143d1a;
+    classDef proc fill:#d6e8ff,stroke:#2c6fbb,stroke-width:2px,color:#0d2c52;
+    classDef model fill:#ffe8a3,stroke:#d48806,stroke-width:2px,color:#5a3d00;
+    classDef rl fill:#ffd9b3,stroke:#e67e22,stroke-width:2px,color:#6b3500;
+    classDef ckpt fill:#eeeeee,stroke:#555,stroke-width:2px,color:#222;
