@@ -5,12 +5,17 @@ Initializes the reward backbone from the SFT checkpoint, adds a scalar reward he
 trains so chosen responses score above rejected ones. Reports held-out preference accuracy.
 
 Single GPU:
-    PYTHONPATH=. python scripts/train_reward.py
+    python scripts/train_reward.py
 Both GPUs:
-    PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_reward.py
+    torchrun --standalone --nproc_per_node=2 scripts/train_reward.py
 """
 
 from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # run from the repo without installing
 
 import time
 

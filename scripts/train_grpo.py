@@ -7,11 +7,16 @@ verifier, compute group-relative advantages, and update with a token-level clipp
 surrogate + KL-to-reference penalty. An arithmetic warm-up curriculum runs first so the
 policy gets non-zero reward variance before facing full GSM8K.
 
-    PYTHONPATH=. python scripts/train_grpo.py
-    PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_grpo.py
+    python scripts/train_grpo.py
+    torchrun --standalone --nproc_per_node=2 scripts/train_grpo.py
 """
 
 from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # run from the repo without installing
 
 import time
 

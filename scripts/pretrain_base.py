@@ -8,14 +8,19 @@ a cosine LR schedule with warmup, weight-decay param groups, and periodic checkp
 The original ``train_transformer.py`` is left untouched.
 
 Single GPU:
-    PYTHONPATH=. python scripts/pretrain_base.py
+    python scripts/pretrain_base.py
 Both GPUs:
-    PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/pretrain_base.py
+    torchrun --standalone --nproc_per_node=2 scripts/pretrain_base.py
 
 Override any config field from the CLI, e.g. ``--batch_size 16 --train_steps 50000``.
 """
 
 from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # run from the repo without installing
 
 import contextlib
 import os

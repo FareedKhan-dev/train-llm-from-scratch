@@ -10,11 +10,16 @@ Datasets (downloaded via HuggingFace ``datasets`` to /ephemeral/hf_cache):
                                      learns the reasoning format the RL verifier rewards)
 
 Example:
-    PYTHONPATH=. HF_HOME=/ephemeral/hf_cache python scripts/prepare_sft_data.py \
+    HF_HOME=/ephemeral/hf_cache python scripts/prepare_sft_data.py \
         --context_length 1024 --out_dir /ephemeral/data
 """
 
 from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # run from the repo without installing
 
 import argparse
 import os

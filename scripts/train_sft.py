@@ -5,12 +5,17 @@ Loads the base checkpoint, trains with the prompt-masked SFT loss, periodically 
 masked dev loss, and saves an SFT checkpoint. DDP + bf16, single code path for 1 or N GPUs.
 
 Single GPU:
-    PYTHONPATH=. python scripts/train_sft.py
+    python scripts/train_sft.py
 Both GPUs:
-    PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_sft.py
+    torchrun --standalone --nproc_per_node=2 scripts/train_sft.py
 """
 
 from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # run from the repo without installing
 
 import contextlib
 import math

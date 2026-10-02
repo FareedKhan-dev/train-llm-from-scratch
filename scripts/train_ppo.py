@@ -6,11 +6,16 @@ reward, or a trained reward model), add a per-token KL-to-reference penalty, com
 advantages with the shared value head, then run several clipped-surrogate update epochs.
 Reports mean reward, KL, value loss, clip fraction, and held-out GSM8K accuracy.
 
-    PYTHONPATH=. python scripts/train_ppo.py --reward_source verifier
-    PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_ppo.py
+    python scripts/train_ppo.py --reward_source verifier
+    torchrun --standalone --nproc_per_node=2 scripts/train_ppo.py
 """
 
 from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # run from the repo without installing
 
 import time
 

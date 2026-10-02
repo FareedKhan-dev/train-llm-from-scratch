@@ -5,11 +5,16 @@ The policy is initialized from the SFT checkpoint; a frozen deep copy of it serv
 DPO/KTO reference (ORPO is reference-free). Reports implicit-reward accuracy on held-out
 preferences and GSM8K dev accuracy.
 
-    PYTHONPATH=. python scripts/train_dpo.py --loss_type dpo --beta 0.1
-    PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_dpo.py
+    python scripts/train_dpo.py --loss_type dpo --beta 0.1
+    torchrun --standalone --nproc_per_node=2 scripts/train_dpo.py
 """
 
 from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # run from the repo without installing
 
 import time
 

@@ -3,10 +3,10 @@ Evaluate any stage checkpoint on GSM8K (greedy) and optionally dump sample gener
 Use it to build the headline "GSM8K accuracy across stages" table:
 
     for s in base_pretrained sft dpo ppo grpo; do
-      PYTHONPATH=. python scripts/eval_post_training.py --ckpt /ephemeral/ckpts/$s.pt \
+      python scripts/eval_post_training.py --ckpt /ephemeral/ckpts/$s.pt \
         --label $s --limit 200 --append /ephemeral/logs/stage_table.jsonl
     done
-    PYTHONPATH=. python scripts/eval_post_training.py --table /ephemeral/logs/stage_table.jsonl
+    python scripts/eval_post_training.py --table /ephemeral/logs/stage_table.jsonl
 
 Model dimensions are read from the checkpoint's stored ``cfg`` so you don't have to repeat
 them. Reward checkpoints (which have a reward head, not an LM head only) still load because
@@ -14,6 +14,11 @@ we keep just the backbone keys for generation.
 """
 
 from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # run from the repo without installing
 
 import argparse
 import json

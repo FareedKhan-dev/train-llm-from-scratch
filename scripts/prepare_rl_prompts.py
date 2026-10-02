@@ -6,10 +6,15 @@ Build RL prompt sets ({"prompt", "gold"}) for PPO/GRPO:
     where even a weak model gets some non-zero reward so RL has signal to start from)
 
 Example:
-    PYTHONPATH=. HF_HOME=/ephemeral/hf_cache python scripts/prepare_rl_prompts.py --out_dir /ephemeral/data
+    HF_HOME=/ephemeral/hf_cache python scripts/prepare_rl_prompts.py --out_dir /ephemeral/data
 """
 
 from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # run from the repo without installing
 
 import argparse
 import json

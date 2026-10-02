@@ -5,14 +5,19 @@ Model dimensions are read from the checkpoint, so you only pass the path. Use th
 template for instruction-tuned models, or --raw for base-model continuation.
 
 One-shot:
-    PYTHONPATH=. python scripts/chat.py --ckpt /ephemeral/ckpts/sft.pt --prompt "What is 13 + 29?"
-    PYTHONPATH=. python scripts/chat.py --ckpt /ephemeral/ckpts/grpo.pt --prompt "..." --greedy
-    PYTHONPATH=. python scripts/chat.py --ckpt /ephemeral/ckpts/base_pretrained.pt --raw --prompt "Once upon a time"
+    python scripts/chat.py --ckpt /ephemeral/ckpts/sft.pt --prompt "What is 13 + 29?"
+    python scripts/chat.py --ckpt /ephemeral/ckpts/grpo.pt --prompt "..." --greedy
+    python scripts/chat.py --ckpt /ephemeral/ckpts/base_pretrained.pt --raw --prompt "Once upon a time"
 Interactive REPL (no --prompt):
-    PYTHONPATH=. python scripts/chat.py --ckpt /ephemeral/ckpts/sft.pt
+    python scripts/chat.py --ckpt /ephemeral/ckpts/sft.pt
 """
 
 from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # run from the repo without installing
 
 import argparse
 

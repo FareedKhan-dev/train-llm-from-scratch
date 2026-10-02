@@ -8,10 +8,10 @@ Writes to /ephemeral by default (the 1.5TB disk).
 
 Examples:
     # dev split from the Pile validation file
-    PYTHONPATH=. python scripts/prepare_pretrain_data.py --split val \
+    python scripts/prepare_pretrain_data.py --split val \
         --out /ephemeral/data/pile_dev.h5
     # one training shard
-    PYTHONPATH=. python scripts/prepare_pretrain_data.py --split train --num_shards 1 \
+    python scripts/prepare_pretrain_data.py --split train --num_shards 1 \
         --out /ephemeral/data/pile_train.h5
 """
 
