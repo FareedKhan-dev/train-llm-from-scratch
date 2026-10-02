@@ -1,7 +1,28 @@
+"""
+Pretrain the original Transformer with plain Python settings (config/config.py).
+
+This is the simplest training loop in the repo: one device, AdamW, a step decay of the
+learning rate, periodic evaluation and checkpoints. Named presets make it easy to start
+small, and every preset can be overridden from the command line.
+
+On a laptop CPU (no GPU needed), after `python scripts/prepare_tiny_data.py`:
+    python scripts/train_transformer.py --preset tiny
+    python scripts/train_transformer.py --preset student
+    python scripts/train_transformer.py --preset student --arch modern   # same size, 2026 architecture
+On a GPU, with the Pile data from scripts/data_download.py + scripts/data_preprocess.py:
+    python scripts/train_transformer.py --preset 13m
+    python scripts/train_transformer.py                                  # the constants in config/config.py
+
+The vocabulary size and tokenizer are read from the training file when it stores them (files
+made by prepare_tiny_data.py do) and saved in the checkpoint, so scripts/generate_text.py
+needs nothing but the checkpoint path.
+"""
+
 from __future__ import annotations
 
 import argparse
 import contextlib
+import json
 import os
 import re
 import sys
@@ -10,6 +31,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import h5py
 import numpy as np
 import torch
 from tqdm import tqdm
@@ -19,8 +41,12 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from config.config import default_config as config
+from config.presets import PRESETS, apply_preset
 from src.checkpoint import model_state_from_checkpoint
+from src.device import DEVICE_CHOICES, configure_cpu_threads, resolve_device, sync_step
+from src.models.factory import ARCHITECTURES, build_model
 from src.models.transformer import Transformer
+from src.tokenizer import DEFAULT_TOKENIZER, safe_decode, tokenizer_from_spec
 
 
 # --- Runtime Diagnostics Helpers ---
@@ -90,6 +116,34 @@ def estimate_memory_budget(num_params: int, device: str, use_amp: bool) -> str:
         f"VRAM budget: ~{state_gib:.2f} GiB params+optimizer state vs {total_gib:.2f} GiB "
         f"total on {torch.cuda.get_device_name()}{note}"
     )
+
+
+# --- Data Helpers ---
+
+def read_data_info(path: str) -> Tuple[Optional[Dict[str, Any]], Optional[int]]:
+    """Tokenizer spec and vocab size stored in a token file (None for files that lack them)."""
+    with h5py.File(path, "r") as f:
+        attrs = f["tokens"].attrs
+        spec = json.loads(attrs["tokenizer"]) if "tokenizer" in attrs else None
+        vocab = int(attrs["vocab_size"]) if "vocab_size" in attrs else None
+    return spec, vocab
+
+
+def round_up(value: int, multiple: int = 64) -> int:
+    """Pad the vocabulary to a multiple of 64: matrix multiplies run faster on those sizes."""
+    return ((value + multiple - 1) // multiple) * multiple
+
+
+@torch.no_grad()
+def sample_text(model: torch.nn.Module, train_config: Dict[str, Any], prompt: str, n_tokens: int = 120) -> str:
+    """Generate a short continuation of ``prompt`` with the training tokenizer."""
+    tok = tokenizer_from_spec(train_config.get("tokenizer"))
+    ids = torch.tensor([tok.encode_ordinary(prompt)], dtype=torch.long, device=train_config["device"])
+    model.eval()
+    out = model.generate(ids, max_new_tokens=n_tokens, temperature=0.8, top_k=50,
+                         context_window=train_config["t_context_length"])
+    model.train()
+    return safe_decode(tok, out[0].tolist())
 
 
 # --- Checkpoint Helpers ---
@@ -348,7 +402,27 @@ def estimate_loss(model: Transformer, train_config: Dict[str, Any], steps: int) 
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Train the Transformer model from scratch.")
+    parser = argparse.ArgumentParser(
+        description="Train the Transformer model from scratch.",
+        epilog="Presets: " + ", ".join(sorted(PRESETS)) + " (see config/presets.py).",
+    )
+    # --- Model size, data and device (all optional; default = the values in config/config.py) ---
+    parser.add_argument("--preset", choices=sorted(PRESETS), default=None,
+                        help="Named model/training size. tiny/student/small run on a laptop CPU.")
+    parser.add_argument("--arch", choices=list(ARCHITECTURES), default=None,
+                        help="classic = the original Transformer, modern = RoPE/RMSNorm/SwiGLU/GQA.")
+    parser.add_argument("--device", choices=list(DEVICE_CHOICES), default=None,
+                        help="auto picks CUDA, then Apple MPS, then the CPU.")
+    parser.add_argument("--train-path", default=None, help="Tokenized training file (.h5).")
+    parser.add_argument("--dev-path", default=None, help="Tokenized validation file (.h5).")
+    parser.add_argument("--out-path", default=None, help="Where to save the final model (.pt).")
+    parser.add_argument("--steps", type=int, default=None, help="Number of training steps.")
+    parser.add_argument("--batch-size", type=int, default=None, help="Sequences per step.")
+    parser.add_argument("--lr", type=float, default=None, help="Learning rate (decayed 10x for the last 20%% of steps).")
+    parser.add_argument("--eval-every", type=int, default=None, help="Evaluate every N steps.")
+    parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducible runs.")
+    parser.add_argument("--sample", default=None,
+                        help="Prompt to continue after training (the CPU presets use 'Once upon a time').")
     parser.add_argument(
         "--resume",
         nargs="?",
@@ -415,9 +489,48 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def resolve_train_config(args: argparse.Namespace) -> Dict[str, Any]:
+    """config/config.py, then the preset, then command-line flags (later wins)."""
+    train_config = dict(config)
+    if args.preset:
+        train_config = apply_preset(train_config, args.preset)
+    flags = {
+        "arch": args.arch, "train_path": args.train_path, "dev_path": args.dev_path,
+        "t_out_path": args.out_path, "t_batch_size": args.batch_size, "t_lr": args.lr,
+        "t_eval_steps": args.eval_every, "sample_prompt": args.sample,
+    }
+    train_config.update({k: v for k, v in flags.items() if v is not None})
+    if args.lr is not None:
+        train_config["t_lr_decayed"] = args.lr / 10
+    if args.steps is not None:
+        train_config["t_train_steps"] = args.steps
+        train_config["t_lr_decay_step"] = int(args.steps * 0.8)
+    train_config["device"] = resolve_device(args.device or train_config.get("device", "auto"))
+
+    if not os.path.exists(train_config["train_path"]):
+        laptop = args.preset in ("tiny", "student", "small") or "tiny" in train_config["train_path"]
+        hint = ("python scripts/prepare_tiny_data.py" if laptop
+                else "python scripts/data_download.py && python scripts/data_preprocess.py")
+        raise SystemExit(f"Training data not found at {train_config['train_path']}. Create it first:\n    {hint}")
+    spec, vocab = read_data_info(train_config["train_path"])
+    train_config["tokenizer"] = spec or DEFAULT_TOKENIZER
+    if vocab is not None and round_up(vocab) != train_config["vocab_size"]:
+        print(f"Vocabulary from the data file: {vocab} tokens -> vocab_size {round_up(vocab)}")
+        train_config["vocab_size"] = round_up(vocab)
+    return train_config
+
+
 def main() -> None:
     args = parse_args()
-    train_config = dict(config)
+    train_config = resolve_train_config(args)
+    if args.seed is not None:
+        torch.manual_seed(args.seed)
+        np.random.seed(args.seed)
+    if train_config["device"] == "cpu":
+        configure_cpu_threads()
+        if not args.preset and train_config["n_embed"] >= 2048:
+            print("Note: config/config.py describes a ~3B parameter model, far too big for a CPU. "
+                  "Try --preset tiny (see config/presets.py).")
     checkpoint_every = (
         args.checkpoint_every
         if args.checkpoint_every is not None
@@ -471,17 +584,13 @@ def main() -> None:
     if train_config['device'].startswith('cuda') and torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
 
-    model = Transformer(
-        n_head=train_config['n_head'],
-        n_embed=train_config['n_embed'],
-        context_length=train_config['context_length'],
-        vocab_size=train_config['vocab_size'],
-        N_BLOCKS=train_config['n_blocks'],
-    ).to(train_config['device'])
+    # classic = the Transformer in src/models/transformer.py, modern = src/models/modern.
+    model = build_model(train_config).to(train_config['device'])
 
     # Print the total number of parameters.
     total_params = sum(p.numel() for p in model.parameters())
-    print(f"Total number of parameters in the model: {total_params:,}")
+    print(f"Total number of parameters in the model: {total_params:,} "
+          f"({train_config.get('arch', 'classic')} architecture, vocab {train_config['vocab_size']})")
 
     # Apply opt-in memory optimisations.
     model.gradient_checkpointing = use_grad_ckpt
@@ -564,6 +673,7 @@ def main() -> None:
 
             scaler.step(optimizer)
             scaler.update()
+            sync_step(train_config['device'])  # runs the queued graph on TPUs, a no-op elsewhere
             last_completed_step = step
 
             # Measure step time and instantaneous throughput for diagnostics.
@@ -636,6 +746,9 @@ def main() -> None:
     print(f"Saved model to {modified_model_out_path}")
     print(get_peak_memory_report(train_config['device']))
     print(f"Finished training. Train loss: {train_loss:.4f}, Dev loss: {dev_loss:.4f}")
+    if train_config.get("sample_prompt"):
+        print("\nSample:\n" + sample_text(model, train_config, train_config["sample_prompt"]))
+        print(f"\nMore: python scripts/generate_text.py --model_path {modified_model_out_path}")
 
 
 if __name__ == "__main__":
