@@ -1,8 +1,8 @@
-import os
 import argparse
+import os
+
 import requests
 from tqdm import tqdm
-from typing import List
 
 # Base URL for the dataset files
 BASE_URL = "https://huggingface.co/datasets/monology/pile-uncopyrighted/resolve/main"
@@ -13,7 +13,7 @@ def download_file(url: str, file_name: str) -> None:
     """
     Downloads a file from the given URL and saves it with the specified file name.
     Displays a progress bar using tqdm.
-    
+
     Args:
         url (str): The URL of the file to download.
         file_name (str): The local path where the file will be saved.
@@ -26,10 +26,10 @@ def download_file(url: str, file_name: str) -> None:
         for chunk in tqdm(response.iter_content(block_size), total=total_size // block_size, desc="Downloading", leave=True):
             f.write(chunk)  # Write each chunk to the file
 
-def download_dataset(val_url: str, train_urls: List[str], val_dir: str, train_dir: str, max_train_files: int) -> None:
+def download_dataset(val_url: str, train_urls: list[str], val_dir: str, train_dir: str, max_train_files: int) -> None:
     """
     Manages downloading of the dataset, including both validation and training files.
-    
+
     Args:
         val_url (str): URL for the validation dataset.
         train_urls (list): List of URLs for the training dataset files.

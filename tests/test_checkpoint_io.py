@@ -123,7 +123,6 @@ def test_legacy_trainer_resumes_from_prefixed_checkpoint(tmp_path: str) -> None:
     from scripts.train_transformer import restore_training_checkpoint
 
     model = Transformer(n_head=2, n_embed=8, context_length=8, vocab_size=32, N_BLOCKS=1)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
     prefixed = {f"_orig_mod.{k}": v for k, v in model.state_dict().items()}
     path = os.path.join(tmp_path, "checkpoint_step_00000004.pt")
     torch.save({"model_state_dict": prefixed, "last_completed_step": 4, "losses": [1.0]}, path)

@@ -7,8 +7,8 @@ import os
 
 import streamlit as st
 
-from ui import theme
 from src.device import resolve_device
+from ui import theme
 from ui.stages import CKPT_DIR
 
 theme.setup_page("Chat", "💬")

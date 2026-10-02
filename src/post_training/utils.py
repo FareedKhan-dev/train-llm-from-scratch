@@ -25,7 +25,6 @@ from src.checkpoint import (
     unwrap_model,
 )
 from src.models.factory import LanguageModel, build_model
-from src.models.transformer import Transformer
 
 
 def amp_autocast(amp_dtype: str | None, device: str):

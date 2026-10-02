@@ -21,8 +21,8 @@ than half of the window when the answers are long too. See :func:`encode_prefere
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from itertools import zip_longest
-from typing import Iterator
 
 import numpy as np
 import torch

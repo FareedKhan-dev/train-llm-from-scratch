@@ -17,7 +17,7 @@ from src.models.factory import LanguageModel
 from src.post_training.utils import build_model_from_config, gather_last
 
 
-def load_reward_model(cfg, ckpt_path: str, device: str) -> "RewardModel":
+def load_reward_model(cfg, ckpt_path: str, device: str) -> RewardModel:
     """Reconstruct a trained :class:`RewardModel` (backbone + reward head) from a reward
     checkpoint saved by ``scripts/train_reward.py``."""
     backbone = build_model_from_config(cfg)

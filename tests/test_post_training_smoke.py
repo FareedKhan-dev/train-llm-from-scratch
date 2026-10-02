@@ -12,13 +12,14 @@ import torch.nn.functional as F
 from data_loader.preference_dataset import _collate
 from src.models.transformer import Transformer
 from src.post_training import chat_template as ct
-from src.post_training.rollout import (
-    generate_with_logprobs, compute_logprobs, filter_logits,
-)
-from src.post_training.value_head import TransformerWithValueHead
 from src.post_training.reward_model import RewardModel
-from src.post_training.utils import make_frozen_copy, gather_last, masked_mean, build_model_from_config
-from src.post_training.rewards import extract_answer, gsm8k_gold_answer, reward_gsm8k, is_correct
+from src.post_training.rewards import extract_answer, gsm8k_gold_answer, is_correct, reward_gsm8k
+from src.post_training.rollout import (
+    compute_logprobs,
+    generate_with_logprobs,
+)
+from src.post_training.utils import build_model_from_config, gather_last, make_frozen_copy, masked_mean
+from src.post_training.value_head import TransformerWithValueHead
 
 
 def _tiny_model(vocab=64, ctx=32):
@@ -159,7 +160,7 @@ def test_preference_truncation_preserves_responses():
 
 
 def test_build_from_config():
-    from config.post_training_config import smoke, SFTConfig
+    from config.post_training_config import SFTConfig, smoke
     cfg = smoke(SFTConfig)
     m = build_model_from_config(cfg)
     assert m.context_length == 64 and m.lm_head.out_features == 256

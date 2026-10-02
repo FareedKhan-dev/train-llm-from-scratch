@@ -25,12 +25,13 @@ import torch
 from config.post_training_config import RewardConfig
 from data_loader.preference_dataset import get_preference_iterator
 from src.post_training.cli import parse_config_with_json
-from src.post_training.distributed import ddp_setup, ddp_wrap, cleanup, reduce_scalar
+from src.post_training.distributed import cleanup, ddp_setup, ddp_wrap, reduce_scalar
 from src.post_training.logging_utils import MetricsLogger
 from src.post_training.optim import configure_optimizer, cosine_lr, set_lr
 from src.post_training.reward_model import RewardModel
 from src.post_training.reward_train import bradley_terry_loss, preference_accuracy, reward_margin
 from src.post_training.utils import amp_autocast, load_backbone_from_ckpt, save_stage_ckpt, set_seed, unwrap
+
 
 def _pair_rewards(rm, batch, cfg, ctx):
     """Forward chosen+rejected in one pass; return (chosen_rewards, rejected_rewards)."""

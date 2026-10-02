@@ -11,8 +11,8 @@ from __future__ import annotations
 import torch
 
 from src.post_training.chat_template import EOT_ID, decode, encode_prompt
-from src.post_training.rollout import generate_with_logprobs
 from src.post_training.rewards import gsm8k_gold_answer, is_correct
+from src.post_training.rollout import generate_with_logprobs
 
 
 def _model_context_length(model) -> int:

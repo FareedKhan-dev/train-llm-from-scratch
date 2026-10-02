@@ -28,7 +28,7 @@ import re
 import h5py
 import numpy as np
 
-from src.post_training.chat_template import encode_chat, ANSWER_OPEN, ANSWER_CLOSE, THINK_OPEN, THINK_CLOSE
+from src.post_training.chat_template import ANSWER_CLOSE, ANSWER_OPEN, THINK_CLOSE, THINK_OPEN, encode_chat
 from src.post_training.sft import pack_examples
 
 _CALC_RE = re.compile(r"<<[^>]*>>")          # GSM8K calculator annotations

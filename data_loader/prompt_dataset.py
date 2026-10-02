@@ -7,7 +7,7 @@ across ranks so each GPU optimizes on its own prompts.
 from __future__ import annotations
 
 import json
-from typing import Iterator
+from collections.abc import Iterator
 
 import numpy as np
 

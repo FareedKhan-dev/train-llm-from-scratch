@@ -11,7 +11,12 @@ from dataclasses import dataclass
 
 from config import paths
 from config.post_training_config import (
-    PretrainConfig, SFTConfig, RewardConfig, DPOConfig, PPOConfig, GRPOConfig,
+    DPOConfig,
+    GRPOConfig,
+    PPOConfig,
+    PretrainConfig,
+    RewardConfig,
+    SFTConfig,
 )
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

@@ -30,8 +30,8 @@ Two outputs matter for training:
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from functools import lru_cache
-from typing import Iterable
 
 import tiktoken
 
@@ -50,7 +50,7 @@ ANSWER_OPEN, ANSWER_CLOSE = "<answer>", "</answer>"
 
 
 @lru_cache(maxsize=1)
-def get_tokenizer() -> "tiktoken.Encoding":
+def get_tokenizer() -> tiktoken.Encoding:
     """Return the shared r50k_base encoder (cached so we build it once)."""
     return tiktoken.get_encoding("r50k_base")
 

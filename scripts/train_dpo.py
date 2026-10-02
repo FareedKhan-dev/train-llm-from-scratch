@@ -27,13 +27,18 @@ import torch
 from config.post_training_config import DPOConfig
 from data_loader.preference_dataset import get_preference_iterator
 from src.post_training.cli import parse_config_with_json
-from src.post_training.distributed import ddp_setup, ddp_wrap, cleanup, reduce_scalar
+from src.post_training.distributed import cleanup, ddp_setup, ddp_wrap, reduce_scalar
 from src.post_training.dpo import dpo_loss, implicit_accuracy, ipo_loss, kto_loss, orpo_loss, simpo_loss
 from src.post_training.logging_utils import MetricsLogger
 from src.post_training.optim import configure_optimizer, cosine_lr, set_lr
 from src.post_training.rollout import sequence_logprobs
 from src.post_training.utils import (
-    amp_autocast, load_backbone_from_ckpt, make_frozen_copy, save_stage_ckpt, set_seed, unwrap,
+    amp_autocast,
+    load_backbone_from_ckpt,
+    make_frozen_copy,
+    save_stage_ckpt,
+    set_seed,
+    unwrap,
 )
 
 REFERENCE_FREE = {"orpo", "simpo"}

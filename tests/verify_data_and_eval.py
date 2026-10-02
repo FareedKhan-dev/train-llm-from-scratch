@@ -10,8 +10,8 @@ import json
 import h5py
 import numpy as np
 
-from src.post_training.chat_template import EOT_ID, decode, encode_chat, ASSISTANT_HEADER
-from src.post_training.rewards import gsm8k_gold_answer, extract_answer, is_correct, reward_gsm8k
+from src.post_training.chat_template import ASSISTANT_HEADER, EOT_ID, decode, encode_chat
+from src.post_training.rewards import extract_answer, gsm8k_gold_answer, is_correct, reward_gsm8k
 
 DATA = "data"
 PASS, FAIL = "PASS", "FAIL"

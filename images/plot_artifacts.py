@@ -7,8 +7,13 @@ Usage:
     python images/plot_artifacts.py <artifacts_dir>
 where <artifacts_dir> holds pretrain_stdout.txt and stage_table.jsonl.
 """
-import json, os, re, sys
+import json
+import os
+import re
+import sys
+
 import matplotlib as mpl
+
 mpl.use("Agg")
 import matplotlib.pyplot as plt
 
@@ -39,7 +44,8 @@ def plot_loss():
     ax.set_title("Pretraining a 77M base on The Pile (2x L40)", fontsize=15)
     ax.grid(True, alpha=0.25); ax.legend()
     fig.tight_layout(); fig.savefig(os.path.join(OUT, "loss_curve.png"), dpi=150, facecolor="white")
-    print("wrote loss_curve.png  (last train=%.3f%s)" % (ys[-1], (", dev=%.3f" % ed[-1]) if ev else ""))
+    dev = f", dev={ed[-1]:.3f}" if ev else ""
+    print(f"wrote loss_curve.png  (last train={ys[-1]:.3f}{dev})")
 
 def plot_gsm8k():
     path = os.path.join(ART, "stage_table.jsonl")

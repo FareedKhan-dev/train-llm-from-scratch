@@ -22,7 +22,6 @@ import argparse
 import json
 import os
 
-
 _ASSISTANT_MARKER = "\n\nAssistant:"
 
 

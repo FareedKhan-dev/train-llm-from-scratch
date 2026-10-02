@@ -29,7 +29,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import h5py
 import numpy as np
@@ -47,7 +47,6 @@ from src.device import DEVICE_CHOICES, configure_cpu_threads, resolve_device, sy
 from src.models.factory import ARCHITECTURES, build_model
 from src.models.transformer import Transformer
 from src.tokenizer import DEFAULT_TOKENIZER, safe_decode, tokenizer_from_spec
-
 
 # --- Runtime Diagnostics Helpers ---
 
@@ -120,7 +119,7 @@ def estimate_memory_budget(num_params: int, device: str, use_amp: bool) -> str:
 
 # --- Data Helpers ---
 
-def read_data_info(path: str) -> Tuple[Optional[Dict[str, Any]], Optional[int]]:
+def read_data_info(path: str) -> tuple[dict[str, Any] | None, int | None]:
     """Tokenizer spec and vocab size stored in a token file (None for files that lack them)."""
     with h5py.File(path, "r") as f:
         attrs = f["tokens"].attrs
@@ -135,7 +134,7 @@ def round_up(value: int, multiple: int = 64) -> int:
 
 
 @torch.no_grad()
-def sample_text(model: torch.nn.Module, train_config: Dict[str, Any], prompt: str, n_tokens: int = 120) -> str:
+def sample_text(model: torch.nn.Module, train_config: dict[str, Any], prompt: str, n_tokens: int = 120) -> str:
     """Generate a short continuation of ``prompt`` with the training tokenizer."""
     tok = tokenizer_from_spec(train_config.get("tokenizer"))
     ids = torch.tensor([tok.encode_ordinary(prompt)], dtype=torch.long, device=train_config["device"])
@@ -151,7 +150,7 @@ def sample_text(model: torch.nn.Module, train_config: Dict[str, Any], prompt: st
 CHECKPOINT_RE = re.compile(r"checkpoint_step_(\d+)\.pt$")
 
 
-def load_checkpoint_file(path: str, device: str) -> Dict[str, Any]:
+def load_checkpoint_file(path: str, device: str) -> dict[str, Any]:
     """Load a checkpoint while supporting both newer and older PyTorch versions."""
     try:
         return torch.load(path, map_location=torch.device(device), weights_only=False)
@@ -178,7 +177,7 @@ def checkpoint_step(path: str) -> int:
     return int(match.group(1))
 
 
-def list_checkpoints(checkpoint_dir: str) -> List[str]:
+def list_checkpoints(checkpoint_dir: str) -> list[str]:
     """Return periodic checkpoints sorted by training step."""
     if not os.path.isdir(checkpoint_dir):
         return []
@@ -190,7 +189,7 @@ def list_checkpoints(checkpoint_dir: str) -> List[str]:
     return sorted(paths, key=checkpoint_step)
 
 
-def resolve_resume_path(resume: Optional[str], checkpoint_dir: str) -> Optional[str]:
+def resolve_resume_path(resume: str | None, checkpoint_dir: str) -> str | None:
     """
     Resolve a resume argument.
 
@@ -212,7 +211,7 @@ def current_lr(optimizer: torch.optim.Optimizer) -> float:
     return float(optimizer.param_groups[0]["lr"])
 
 
-def lr_for_step(train_config: Dict[str, Any], step: int) -> float:
+def lr_for_step(train_config: dict[str, Any], step: int) -> float:
     """Return the learning rate that should be active at a given step."""
     if step > train_config['t_lr_decay_step']:
         return float(train_config['t_lr_decayed'])
@@ -229,12 +228,12 @@ def save_training_checkpoint(
     path: str,
     model: Transformer,
     optimizer: torch.optim.Optimizer,
-    train_config: Dict[str, Any],
-    losses: List[float],
+    train_config: dict[str, Any],
+    losses: list[float],
     *,
     step: int,
-    train_loss: Optional[float] = None,
-    dev_loss: Optional[float] = None,
+    train_loss: float | None = None,
+    dev_loss: float | None = None,
     is_final: bool = False,
 ) -> None:
     """
@@ -286,9 +285,9 @@ def restore_training_checkpoint(
     path: str,
     model: Transformer,
     optimizer: torch.optim.Optimizer,
-    train_config: Dict[str, Any],
+    train_config: dict[str, Any],
     device: str,
-) -> Tuple[int, List[float]]:
+) -> tuple[int, list[float]]:
     """
     Restore model/optimizer state and return ``(next_step, losses)``.
 
@@ -341,7 +340,7 @@ def unique_output_path(out_path: str) -> str:
     return modified_model_out_path
 
 
-def as_float(value: Any) -> Optional[float]:
+def as_float(value: Any) -> float | None:
     """Convert scalar tensors/numbers to plain floats for checkpoint metadata."""
     if value is None:
         return None
@@ -353,7 +352,7 @@ def as_float(value: Any) -> Optional[float]:
 # --- Training / Evaluation ---
 
 @torch.no_grad()
-def estimate_loss(model: Transformer, train_config: Dict[str, Any], steps: int) -> Dict[str, float]:
+def estimate_loss(model: Transformer, train_config: dict[str, Any], steps: int) -> dict[str, float]:
     """
     Evaluate the model on training and development datasets and calculate average loss.
 
@@ -491,7 +490,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def resolve_train_config(args: argparse.Namespace) -> Dict[str, Any]:
+def resolve_train_config(args: argparse.Namespace) -> dict[str, Any]:
     """config/config.py, then the preset, then command-line flags (later wins)."""
     train_config = dict(config)
     if args.preset:
@@ -611,7 +610,7 @@ def main() -> None:
     optimizer = torch.optim.AdamW(model.parameters(), lr=train_config['t_lr'])
 
     # List to track loss values during training.
-    losses: List[float] = []
+    losses: list[float] = []
     start_step = 0
     last_completed_step = -1
     resume_path = resolve_resume_path(args.resume, checkpoint_dir)

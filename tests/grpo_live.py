@@ -1,8 +1,9 @@
 """Live-progress GRPO-ascends-reward proof (prints every few iters). See verify_rl_optimizes.py."""
 import torch
+
 from src.models.transformer import Transformer
 from src.post_training.grpo import group_advantages, grpo_loss
-from src.post_training.rollout import generate_with_logprobs, compute_logprobs
+from src.post_training.rollout import compute_logprobs, generate_with_logprobs
 from src.post_training.utils import make_frozen_copy, set_seed
 
 VOCAB, TARGET, PL, GEN, G = 64, 7, 4, 8, 8
