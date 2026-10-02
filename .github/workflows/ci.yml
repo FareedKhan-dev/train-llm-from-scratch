@@ -1,0 +1,79 @@
+name: ci
+
+# Lint, type-check and test every push and pull request on CPU-only machines.
+# Nothing here needs a GPU: the tests use tiny models, and the end-to-end test trains every
+# stage for a few steps on generated data.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+      - name: ruff
+        run: uvx ruff check .
+
+  types:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "3.12"
+      - name: Install (CPU-only torch)
+        run: |
+          uv venv
+          uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+          uv pip install -e . mypy
+      - name: mypy
+        run: uv run --no-sync mypy
+
+  test:
+    name: test (${{ matrix.os }}, py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, python: "3.10" }
+          - { os: ubuntu-latest, python: "3.13" }
+          - { os: windows-latest, python: "3.12" }
+          - { os: macos-latest, python: "3.12" }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install (CPU-only torch)
+        shell: bash
+        run: |
+          uv venv
+          # Linux wheels on PyPI bundle CUDA (~2.5 GB); the CPU index avoids that. Windows and
+          # macOS wheels on PyPI are already CPU / MPS builds.
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+          fi
+          uv pip install -e . pytest beartype
+      - name: pytest
+        run: uv run --no-sync pytest -q
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+      - name: Build the documentation site (strict, catches broken links)
+        run: uvx --with mkdocs-material --with pymdown-extensions mkdocs build --strict --site-dir site

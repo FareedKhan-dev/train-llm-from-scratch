@@ -1,8 +1,9 @@
 name: docs
 
 # Build the MkDocs Material site and publish it via GitHub Pages.
-# Pages "Source" must be set to "GitHub Actions" (Settings -> Pages) — which it already is.
+# Pages "Source" must be set to "GitHub Actions" (Settings -> Pages), which it already is.
 # No gh-pages branch needed; this uses the official Pages deployment actions.
+# (Pull requests build the site in ci.yml without deploying it.)
 
 on:
   push:
@@ -27,16 +28,16 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
-          python-version: "3.11"
+          python-version: "3.12"
       - name: Install docs dependencies
         run: pip install mkdocs mkdocs-material pymdown-extensions
       - name: Build the site (strict)
         run: mkdocs build --strict --site-dir ./site
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: ./site
 
@@ -48,4 +49,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
