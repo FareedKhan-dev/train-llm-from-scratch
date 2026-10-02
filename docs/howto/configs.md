@@ -2,13 +2,13 @@
 
 Every training stage is configured by a small, human-editable JSON file under
 [`configs/`](https://github.com/FareedKhan-dev/train-llm-from-scratch/tree/main/configs). You edit one
-file and see only that stage's knobs — the model architecture and runtime live in the shared
+file and see only that stage's knobs; the model architecture and runtime live in the shared
 `configs/base.json`.
 
 ```
 configs/
   base.json        # shared model + runtime (vocab, n_embed, device, amp_dtype, ...)
-  pretrain.json    # one file per stage — only that stage's hyperparameters
+  pretrain.json    # one file per stage, only that stage's hyperparameters
   sft.json  reward.json  dpo.json  ppo.json  grpo.json
   smoke/           # tiny CPU variant (small model + few steps) for quick tests
     base.json  pretrain.json  sft.json  ...
@@ -29,7 +29,7 @@ source; the CLI wins for quick one-offs. JSON `null` maps to Python `None` (the 
 
 !!! tip "Smoke configs auto-shrink the model"
     A stage JSON in a sub-folder uses that folder's `base.json`. So `configs/smoke/sft.json` picks up
-    `configs/smoke/base.json` (tiny model, CPU) automatically — handy for a fast end-to-end test.
+    `configs/smoke/base.json` (tiny model, CPU) automatically, handy for a fast end-to-end test.
 
 ## Editing & inspecting
 

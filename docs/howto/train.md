@@ -1,13 +1,13 @@
 # Train (UI & CLI)
 
 You can run every stage two ways: from the **command line** (full control, best for long jobs) or from
-the **Streamlit control panel** (forms, one-click launch, live logs, charts — see [The UI](ui.md)).
+the **Streamlit control panel** (forms, one-click launch, live logs, charts; see [The UI](ui.md)).
 
 ## Install
 
 ```bash
-pip install -e ".[train]"     # editable install — no more PYTHONPATH=.
-export HF_HOME=/ephemeral/hf_cache
+pip install -e ".[train]"     # editable install, no more PYTHONPATH=.
+# optional: export HF_HOME=/path/to/big/disk/hf_cache  to keep Hugging Face downloads elsewhere
 ```
 
 ## The pipeline, end to end (CLI)
@@ -55,7 +55,7 @@ bash scripts/run_posttraining.sh        # SFT → RM → DPO → PPO → GRPO �
 - `torchrun --standalone --nproc_per_node=N` launches N data-parallel ranks (DDP + bf16). Only rank 0
   logs and checkpoints.
 - On the dev box (2× H100, no NVLink) the educational attention materializes a `(B, n_head, T, T)` tensor
-  per block, so memory scales with sequence length — at context 1024 use `--batch_size 8 --grad_accum 12`
+  per block, so memory scales with sequence length: at context 1024 use `--batch_size 8 --grad_accum 12`
   and recover the effective batch via accumulation. Set `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`.
 
 ## Where outputs go

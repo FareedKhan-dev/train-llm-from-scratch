@@ -1,6 +1,6 @@
 # Post-Training from Scratch: SFT · Reward Model · PPO · DPO · GRPO
 
-This adds a complete, **from-scratch** (pure PyTorch — no `trl`/`peft`/`transformers`)
+This adds a complete, **from-scratch** (pure PyTorch, no `trl`/`peft`/`transformers`)
 post-training suite on top of the repo's own `Transformer`, covering the full modern
 pipeline used to turn a base LM into an aligned, reasoning model:
 
@@ -16,7 +16,7 @@ metric is **greedy GSM8K accuracy across stages**.
 
 > **Expectation:** a ~400M model pretrained from scratch on 2×H100 is coherent and
 > instruction-followable and shows real before/after gains at each stage, but its
-> *absolute* GSM8K score stays modest — frontier numbers need far more pretraining
+> *absolute* GSM8K score stays modest; frontier numbers need far more pretraining
 > compute. The value here is the authentic end-to-end pipeline on real data with real eval.
 
 ---
@@ -55,7 +55,7 @@ PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/pretrain_base.py
 
 [scripts/pretrain_base.py](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/scripts/pretrain_base.py) upgrades the original
 `train_transformer.py` recipe with DDP, bf16 autocast, gradient accumulation, a cosine LR
-schedule with warmup, and periodic checkpointing — everything needed to train a mid-size
+schedule with warmup, and periodic checkpointing: everything needed to train a mid-size
 model on 2×H100. The original training script is untouched.
 
 ---
@@ -89,7 +89,7 @@ PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_reward.py  #
   ([src/post_training/reward_model.py](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/reward_model.py)), trained with the
   **Bradley-Terry** pairwise loss in
   [src/post_training/reward_train.py](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/reward_train.py). The reward is read
-  off the last real token (causal attention makes right-padding safe — no attention mask
+  off the last real token (causal attention makes right-padding safe, no attention mask
   needed). **Eval:** held-out preference accuracy (expect ~0.65–0.75 on noisy real data).
 
 ## 4. DPO / ORPO / KTO
@@ -128,7 +128,7 @@ PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_grpo.py --gr
 ```
 
 - **From-scratch:** group-relative advantages + token-level clipped surrogate with a k3 KL
-  penalty in [src/post_training/grpo.py](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/grpo.py). **No critic** — the
+  penalty in [src/post_training/grpo.py](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/grpo.py). **No critic**: the
   baseline is each prompt's own group of G samples. An **arithmetic curriculum** runs for
   the first `curriculum_iters` iterations so the policy has non-zero reward variance before
   full GSM8K. **Eval:** mean group reward, informative-group fraction, KL, GSM8K test accuracy.
@@ -137,8 +137,8 @@ PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_grpo.py --gr
 
 ## 7. Inference / chat (any stage checkpoint)
 
-[scripts/chat.py](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/scripts/chat.py) loads **any** checkpoint (base/sft/dpo/ppo/grpo) —
-reading the model dims from the checkpoint itself — and generates with the chat template
+[scripts/chat.py](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/scripts/chat.py) loads **any** checkpoint (base/sft/dpo/ppo/grpo),
+reading the model dims from the checkpoint itself, and generates with the chat template
 (instruction models) or as raw continuation (the base model):
 
 ```bash
