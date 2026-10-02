@@ -90,9 +90,15 @@ def sync_step(device: str) -> None:
 
 
 def configure_cpu_threads(num_threads: int | None = None) -> int:
-    """Use every physical core for CPU training unless the user set ``OMP_NUM_THREADS``."""
-    if num_threads is None and "OMP_NUM_THREADS" not in os.environ:
-        num_threads = os.cpu_count() or 1
+    """
+    Set how many CPU threads PyTorch uses, and return the number in use.
+
+    By default PyTorch's own choice is kept (one thread per physical core), which is usually
+    right: ``os.cpu_count()`` counts hyper-threads too, and running one thread per logical
+    core oversubscribes the cores and slows matrix multiplies down. On hybrid CPUs
+    (performance + efficiency cores) fewer threads, such as the number of performance cores,
+    can be faster; try a few values with ``scripts/benchmark.py --threads N``.
+    """
     if num_threads:
         torch.set_num_threads(num_threads)
     return torch.get_num_threads()

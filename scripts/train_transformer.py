@@ -421,6 +421,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--lr", type=float, default=None, help="Learning rate (decayed 10x for the last 20%% of steps).")
     parser.add_argument("--eval-every", type=int, default=None, help="Evaluate every N steps.")
     parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducible runs.")
+    parser.add_argument("--threads", type=int, default=None,
+                        help="CPU threads (default: one per physical core). Fewer can be faster on hybrid CPUs.")
     parser.add_argument("--sample", default=None,
                         help="Prompt to continue after training (the CPU presets use 'Once upon a time').")
     parser.add_argument(
@@ -527,7 +529,7 @@ def main() -> None:
         torch.manual_seed(args.seed)
         np.random.seed(args.seed)
     if train_config["device"] == "cpu":
-        configure_cpu_threads()
+        configure_cpu_threads(args.threads)
         if not args.preset and train_config["n_embed"] >= 2048:
             print("Note: config/config.py describes a ~3B parameter model, far too big for a CPU. "
                   "Try --preset tiny (see config/presets.py).")
