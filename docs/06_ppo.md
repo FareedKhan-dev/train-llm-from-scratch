@@ -53,9 +53,9 @@ def forward(self, idx):
 
 ## Rollout + log-probs
 
-[`rollout_prompts`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/rollout.py#L180) length-buckets the prompts and samples a
-completion for each, and [`generate_with_logprobs`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/rollout.py#L94) records the
-sampling log-probs. Log-probs are always taken in **fp32** ([`compute_logprobs`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/rollout.py#L233))
+[`rollout_prompts`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/rollout.py#L162) length-buckets the prompts and samples a
+completion for each, and [`generate_with_logprobs`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/rollout.py#L76) records the
+sampling log-probs. Log-probs are always taken in **fp32** ([`compute_logprobs`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/rollout.py#L215))
 because PPO subtracts them and bf16 rounding there is harmful.
 
 ## GAE: Generalized Advantage Estimation

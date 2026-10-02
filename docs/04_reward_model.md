@@ -36,7 +36,7 @@ flowchart LR
 
 ## The model: a scalar head on the backbone
 
-[`RewardModel`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/reward_model.py#L37) wraps a `Transformer`, drops the `lm_head`,
+[`RewardModel`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/reward_model.py#L33) wraps a `Transformer`, drops the `lm_head`,
 and reads the reward off the **last real token's** hidden state (the InstructGPT convention). Because
 attention is causal, that last token has seen the whole sequence and never attends to the right-padding
 after it, so we need no attention mask:

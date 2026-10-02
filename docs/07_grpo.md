@@ -36,7 +36,7 @@ flowchart LR
 
 ## Group-relative advantage
 
-[`group_advantages`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/grpo.py#L17) is the whole idea: standardize rewards *within
+[`group_advantages`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/grpo.py#L47) is the whole idea: standardize rewards *within
 each group*, so a good answer is one that beats its siblings on the same prompt:
 
 ```python
@@ -52,9 +52,9 @@ groups as a health metric.
 
 ## The loss: clipped surrogate + KL
 
-[`grpo_loss`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/grpo.py#L37) applies the same PPO-style token-level clipped surrogate
+[`grpo_loss`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/grpo.py#L97) applies the same PPO-style token-level clipped surrogate
 (advantage broadcast across a completion's tokens) plus a per-token KL penalty to the reference, using
-Schulman's non-negative **k3** estimator ([`k3_kl`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/grpo.py#L31)):
+Schulman's non-negative **k3** estimator ([`k3_kl`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/grpo.py#L65)):
 
 ```python
 ratio = torch.exp(new_logp - old_logp)

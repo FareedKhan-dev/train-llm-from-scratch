@@ -37,7 +37,7 @@ flowchart LR
 
 DPO compares how much *more* likely the policy makes the chosen response vs the rejected one, relative
 to the reference. So I need the **summed log-prob of each response** under both models.
-[`sequence_logprobs`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/rollout.py#L268) does exactly that (and is reused by PPO/GRPO):
+[`sequence_logprobs`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/rollout.py#L250) does exactly that (and is reused by PPO/GRPO):
 
 ```python
 def sequence_logprobs(model, sequences, response_mask, *, temperature=1.0, requires_grad=True):
@@ -48,7 +48,7 @@ def sequence_logprobs(model, sequences, response_mask, *, temperature=1.0, requi
 
 ## The DPO loss
 
-[`dpo_loss`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/dpo.py#L21) is the canonical objective. The β temperature controls how
+[`dpo_loss`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/dpo.py#L42) is the canonical objective. The β temperature controls how
 hard it pushes away from the reference:
 
 ```python
@@ -62,8 +62,8 @@ def dpo_loss(policy_chosen_logps, policy_rejected_logps, ref_chosen_logps, ref_r
     return loss, chosen_reward, rejected_reward
 ```
 
-The two **variants** ([`orpo_loss`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/dpo.py#L48),
-[`kto_loss`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/dpo.py#L71)) live in the same file:
+The two **variants** ([`orpo_loss`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/dpo.py#L121),
+[`kto_loss`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/dpo.py#L144)) live in the same file:
 - **ORPO**: reference-free: combines the SFT negative-log-likelihood on the chosen response with an
   odds-ratio preference term, folding SFT + alignment into one stage (no frozen reference needed).
 - **KTO**: treats chosen as *desirable* and rejected as *undesirable* against a reference-KL baseline

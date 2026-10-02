@@ -81,7 +81,7 @@ flowchart TD
 ## The one design rule: *wrap, don't rewrite*
 
 Everything here sits on top of the original [`Transformer`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/models/transformer.py). I changed the
-educational model in exactly **one** place: I added a [`forward_hidden`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/models/transformer.py#L56)
+educational model in exactly **one** place: I added a [`forward_hidden`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/models/transformer.py#L68)
 method that returns the final hidden states the `lm_head` consumes. Every post-training head (a value
 head for PPO, a scalar reward head for the reward model) and every RL log-prob computation composes
 *around* that one method, so the from-scratch model you already understand stays intact.

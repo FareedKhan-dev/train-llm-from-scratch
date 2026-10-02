@@ -46,7 +46,7 @@ state = {k.removeprefix("module.").removeprefix("transformer."): v for k, v in s
 
 ## Chat vs raw
 
-[`generate_reply`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/inference.py#L37) has two modes, reusing the same tested
+[`generate_reply`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/inference.py#L44) has two modes, reusing the same tested
 generation core as training/eval ([`batched_generate`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/evaluation.py#L24)):
 
 - **chat** (default): wraps your text in the chat template (optionally with a `system` message) and
