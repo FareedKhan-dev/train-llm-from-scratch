@@ -30,9 +30,9 @@ train = ["datasets", "wandb"]
 # The Streamlit control-panel UI.
 ui = ["streamlit", "pandas", "altair"]
 # The MkDocs Material documentation site.
-docs = ["mkdocs", "mkdocs-material", "pymdown-extensions"]
+docs = ["mkdocs>=1.6,<2", "mkdocs-material>=9.5,<10", "pymdown-extensions"]
 # Everything, for development.
-all = ["datasets", "wandb", "streamlit", "pandas", "altair", "mkdocs", "mkdocs-material", "pymdown-extensions"]
+all = ["datasets", "wandb", "streamlit", "pandas", "altair", "mkdocs>=1.6,<2", "mkdocs-material>=9.5,<10", "pymdown-extensions"]
 
 [dependency-groups]
 # Tests, linting and type checking: `uv sync` installs this group by default.

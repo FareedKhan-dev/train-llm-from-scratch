@@ -83,4 +83,4 @@ jobs:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.2.0  # this action publishes no floating major tag
       - name: Build the documentation site (strict, catches broken links)
-        run: uvx --with mkdocs-material --with pymdown-extensions mkdocs build --strict --site-dir site
+        run: uvx --from "mkdocs>=1.6,<2" --with "mkdocs-material>=9.5,<10" --with pymdown-extensions mkdocs build --strict --site-dir site

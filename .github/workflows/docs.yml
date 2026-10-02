@@ -33,7 +33,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install docs dependencies
-        run: pip install mkdocs mkdocs-material pymdown-extensions
+        run: pip install "mkdocs>=1.6,<2" "mkdocs-material>=9.5,<10" pymdown-extensions  # MkDocs 2 drops themes and plugins
       - name: Build the site (strict)
         run: mkdocs build --strict --site-dir ./site
       - uses: actions/configure-pages@v6
