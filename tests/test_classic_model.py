@@ -1,4 +1,4 @@
-"""The original (classic) Transformer: shapes, causality and forward_embedding."""
+"""The original (classic) Transformer: shapes, causality, forward_embedding and generate()."""
 
 from __future__ import annotations
 
@@ -38,3 +38,20 @@ def test_forward_embedding_works_with_several_blocks() -> None:
         expected = x + last.attn(last.ln1(x))
     assert torch.allclose(residual, expected, atol=1e-6)
 
+
+def test_generate_options() -> None:
+    model = _model()
+    prompt = torch.randint(0, 50, (2, 3))
+    out = model.generate(prompt, max_new_tokens=20)
+    assert out.shape == (2, 23) and torch.equal(out[:, :3], prompt)
+    greedy_a = model.generate(prompt, 10, top_k=1)
+    greedy_b = model.generate(prompt, 10, top_k=1)
+    assert torch.equal(greedy_a, greedy_b)  # top_k=1 is deterministic
+    # a short window must give the same greedy result as cropping by hand
+    windowed = model.generate(prompt, 10, top_k=1, context_window=4)
+    manual = prompt
+    for _ in range(10):
+        logits, _ = model(manual[:, -4:])
+        manual = torch.cat([manual, logits[:, -1].argmax(-1, keepdim=True)], dim=1)
+    assert torch.equal(windowed, manual)
+    assert not torch.is_grad_enabled() or out.requires_grad is False

@@ -129,21 +129,39 @@ class Transformer(nn.Module):
             x = block(x)
         return self.attn_blocks[-1].forward_embedding(x)
 
-    def generate(self, idx: torch.Tensor, max_new_tokens: int) -> torch.Tensor:
+    @torch.no_grad()
+    def generate(
+        self,
+        idx: torch.Tensor,
+        max_new_tokens: int,
+        temperature: float = 1.0,
+        top_k: int | None = None,
+        context_window: int | None = None,
+    ) -> torch.Tensor:
         """
         Generates new tokens given a starting sequence.
 
         Args:
             idx (torch.Tensor): Initial sequence of token indices.
             max_new_tokens (int): Number of tokens to generate.
+            temperature (float): Divide the logits by this before sampling. Below 1 makes the
+                text safer and more repetitive, above 1 more random.
+            top_k (int, optional): Sample only from the k most likely tokens.
+            context_window (int, optional): How many recent tokens the model sees. Defaults to
+                ``context_length``. Pass the window the model was trained on when it was
+                shorter, because positions it never saw in training have untrained embeddings.
 
         Returns:
             torch.Tensor: The extended sequence of tokens.
         """
+        window = min(context_window or self.context_length, self.context_length)
         for _ in range(max_new_tokens):
-            idx_cond = idx[:, -self.context_length:]
+            idx_cond = idx[:, -window:]
             logits, _ = self(idx_cond)
-            logits = logits[:, -1, :]
+            logits = logits[:, -1, :] / max(temperature, 1e-6)
+            if top_k is not None:
+                kth = torch.topk(logits, min(top_k, logits.size(-1))).values[:, [-1]]
+                logits = logits.masked_fill(logits < kth, float('-inf'))
             probs = F.softmax(logits, dim=-1)
             idx_next = torch.multinomial(probs, num_samples=1)
             idx = torch.cat((idx, idx_next), dim=1)
