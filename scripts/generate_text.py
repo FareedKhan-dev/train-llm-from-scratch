@@ -9,6 +9,8 @@ and the window it was trained on. So you only pass the checkpoint path:
     python scripts/generate_text.py --model_path models/student.pt --input_text "The little dog" \
         --max_new_tokens 200 --temperature 0.7 --top_k 40 --num_samples 3
     python scripts/generate_text.py --model_path models/tiny.pt --int8   # int8 linear weights
+    python scripts/generate_text.py --model_path models/student.pt --draft_model models/tiny.pt
+        # speculative decoding: the tiny model guesses, the student model checks
 
 Very old checkpoints that stored only the weights fall back to the sizes in config/config.py.
 """
@@ -32,8 +34,9 @@ from src.checkpoint import (  # noqa: E402
 )
 from src.device import resolve_device  # noqa: E402
 from src.inference.quantize import Int8Linear, quantize_int8  # noqa: E402
+from src.inference.speculative import speculative_generate  # noqa: E402
 from src.models.factory import build_model  # noqa: E402
-from src.tokenizer import safe_decode, tokenizer_from_spec  # noqa: E402
+from src.tokenizer import safe_decode, tokenizer_from_spec, tokenizer_spec  # noqa: E402
 
 
 def load_trained_model(model_path: str, device: str):
@@ -86,6 +89,9 @@ def main() -> None:
     parser.add_argument("--device", default="auto", help="auto, cuda, mps or cpu.")
     parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducible samples.")
     parser.add_argument("--int8", action="store_true", help="Store the linear weights as int8 (about 4x smaller).")
+    parser.add_argument("--draft_model", default=None,
+                        help="A smaller checkpoint with the same tokenizer; turns on speculative decoding.")
+    parser.add_argument("--draft_k", type=int, default=4, help="Tokens the draft model guesses per check.")
     args = parser.parse_args()
 
     if args.seed is not None:
@@ -99,12 +105,29 @@ def main() -> None:
     print(f"Loaded {args.model_path}: {n_params:,} parameters, {model_cfg.get('arch', 'classic')} "
           f"architecture, window {window} tokens, on {device}")
 
+    draft = None
+    if args.draft_model:
+        draft, draft_tokenizer, draft_window, _ = load_trained_model(args.draft_model, device)
+        if tokenizer_spec(draft_tokenizer) != tokenizer_spec(tokenizer):
+            parser.error("--draft_model must use the same tokenizer as --model_path")
+        if args.int8:
+            draft = quantize_int8(draft)
+        print(f"Draft model {args.draft_model} guesses {args.draft_k} tokens at a time")
+
     context = torch.tensor([tokenizer.encode_ordinary(args.input_text)], dtype=torch.long, device=device)
     for i in range(args.num_samples):
-        with torch.no_grad():
-            out = model.generate(context, max_new_tokens=args.max_new_tokens, temperature=args.temperature,
-                                 top_k=args.top_k or None, context_window=window)
-        print(f"\n--- sample {i + 1} ---\n{safe_decode(tokenizer, out[0].tolist())}")
+        if draft is None:
+            with torch.no_grad():
+                out = model.generate(context, max_new_tokens=args.max_new_tokens, temperature=args.temperature,
+                                     top_k=args.top_k or None, context_window=window)
+            stats = ""
+        else:
+            out, spec = speculative_generate(model, draft, context, args.max_new_tokens, k=args.draft_k,
+                                             temperature=args.temperature, top_k=args.top_k or None,
+                                             target_window=window, draft_window=draft_window)
+            stats = (f" ({spec.acceptance_rate:.0%} of the draft's guesses kept, "
+                     f"{spec.tokens_per_target_call:.2f} tokens per pass of the big model)")
+        print(f"\n--- sample {i + 1}{stats} ---\n{safe_decode(tokenizer, out[0].tolist())}")
 
 
 if __name__ == "__main__":
