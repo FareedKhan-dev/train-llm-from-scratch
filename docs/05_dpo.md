@@ -86,9 +86,9 @@ loss.backward()
 ## Run it
 
 ```bash
-PYTHONPATH=. python scripts/train_dpo.py --loss_type dpo  --beta 0.1
-PYTHONPATH=. python scripts/train_dpo.py --loss_type orpo --orpo_lambda 1.0
-PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_dpo.py
+python scripts/train_dpo.py --loss_type dpo  --beta 0.1
+python scripts/train_dpo.py --loss_type orpo --orpo_lambda 1.0
+torchrun --standalone --nproc_per_node=2 scripts/train_dpo.py
 ```
 
 > DPO uses a **small** learning rate (`5e-7` by default). It's easy to over-push away from the
@@ -102,6 +102,6 @@ PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_dpo.py
 - **r_chosen / r_rejected**: the implicit rewards `β·(logπ − logref)`; the gap (margin) should widen.
 - **GSM8K dev accuracy**: the real downstream check.
 
-Saved to `/ephemeral/ckpts/dpo.pt`.
+Saved to `models/dpo.pt`.
 
 ➡️ Next: the RL path, [PPO](06_ppo.md) and [GRPO](07_grpo.md).

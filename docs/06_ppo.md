@@ -94,9 +94,9 @@ log-probs / values, build rewards, GAE, then run `ppo_epochs` of minibatched cli
 ## Run it
 
 ```bash
-PYTHONPATH=. python scripts/train_ppo.py --reward_source verifier   # GSM8K checker as reward
-PYTHONPATH=. python scripts/train_ppo.py --reward_source rm         # use the trained reward.pt
-PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_ppo.py
+python scripts/train_ppo.py --reward_source verifier   # GSM8K checker as reward
+python scripts/train_ppo.py --reward_source rm         # use the trained reward.pt
+torchrun --standalone --nproc_per_node=2 scripts/train_ppo.py
 ```
 
 ## What the numbers mean
@@ -111,6 +111,6 @@ PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_ppo.py
 > PPO is the touchy one: small LR (`1e-6`), `clip 0.2`, grad-clip 1.0, and watch KL. I verified the loop
 > truly *optimizes* by giving it a learnable synthetic reward: reward climbed `0.10 → 1.00`.
 
-Saved to `/ephemeral/ckpts/ppo.pt`.
+Saved to `models/ppo.pt`.
 
 ➡️ Next: [Stage 6: GRPO](07_grpo.md), which drops the critic entirely.

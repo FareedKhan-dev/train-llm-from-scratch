@@ -87,8 +87,8 @@ batch (safe under causal attention) and tracks the true length of each side.
 ## Run it
 
 ```bash
-PYTHONPATH=. python scripts/train_reward.py
-PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_reward.py
+python scripts/train_reward.py
+torchrun --standalone --nproc_per_node=2 scripts/train_reward.py
 # tune: --lr 1e-5 --max_len 768
 ```
 
@@ -99,7 +99,7 @@ PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_reward.py
   HH-RLHF / UltraFeedback expect roughly **0.65 to 0.75**. That's normal: human preferences are noisy.
 - **margin**: mean `r_chosen − r_rejected`; a useful "is it still separating them" signal.
 
-Saved to `/ephemeral/ckpts/reward.pt`; PPO loads it with
+Saved to `models/reward.pt`; PPO loads it with
 [`load_reward_model`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/reward_model.py) when `--reward_source rm`.
 
 ➡️ Next: [Stage 5: PPO](06_ppo.md) (which consumes this), or the RM-free path: [DPO](05_dpo.md).

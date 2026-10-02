@@ -80,8 +80,8 @@ adv = group_advantages(rewards, G)
 ## Run it
 
 ```bash
-PYTHONPATH=. python scripts/train_grpo.py --group_size 8
-PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_grpo.py
+python scripts/train_grpo.py --group_size 8
+torchrun --standalone --nproc_per_node=2 scripts/train_grpo.py
 # tune: --curriculum_iters 100 --kl_coef 0.04 --temperature 1.0
 ```
 
@@ -97,6 +97,6 @@ PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_grpo.py
 > **0.10 → 0.69 → 1.00** in ~15 iterations and saturated. PPO and GRPO share the same rollout/log-prob
 > core, so this also exercises the common machinery.
 
-Saved to `/ephemeral/ckpts/grpo.pt`.
+Saved to `models/grpo.pt`.
 
 ➡️ Next: [measure all stages on GSM8K](08_evaluation.md) and [chat with the result](09_inference.md).

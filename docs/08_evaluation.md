@@ -66,10 +66,10 @@ the stored `cfg`), scores it, and appends a row to a JSONL you can render as a t
 
 ```bash
 for s in base_pretrained sft dpo ppo grpo; do
-  PYTHONPATH=. python scripts/eval_post_training.py --ckpt /ephemeral/ckpts/$s.pt \
-    --label $s --limit 200 --append /ephemeral/logs/stage_table.jsonl
+  python scripts/eval_post_training.py --ckpt models/$s.pt \
+    --label $s --limit 200 --append logs/stage_table.jsonl
 done
-PYTHONPATH=. python scripts/eval_post_training.py --table /ephemeral/logs/stage_table.jsonl
+python scripts/eval_post_training.py --table logs/stage_table.jsonl
 ```
 
 ```
@@ -84,7 +84,7 @@ grpo                    ...      200
 
 ## In-training metrics
 
-Each trainer also writes a metrics JSONL under `/ephemeral/logs/` (via
+Each trainer also writes a metrics JSONL under `logs/` (via
 [`MetricsLogger`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/logging_utils.py)): train/dev loss for SFT, preference accuracy
 for the reward model, implicit-reward accuracy for DPO, and reward/KL/clip-fraction + GSM8K accuracy for
 PPO/GRPO. Pass `--use_wandb true` to also mirror to Weights & Biases; the JSONL is always written so you

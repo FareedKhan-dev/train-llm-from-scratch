@@ -77,9 +77,9 @@ A few choices worth calling out:
 
 ```bash
 # single GPU
-PYTHONPATH=. python scripts/pretrain_base.py
+python scripts/pretrain_base.py
 # both H100s (effective batch = batch_size * grad_accum * num_gpus)
-PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True PYTHONPATH=. \
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
   torchrun --standalone --nproc_per_node=2 scripts/pretrain_base.py \
   --batch_size 8 --grad_accum 12 --train_steps 50000
 ```
@@ -96,7 +96,7 @@ PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True PYTHONPATH=. \
 - **eval train/dev**: averaged loss on held-out windows, printed every `eval_steps`; watch the dev
   loss to spot overfitting.
 
-Checkpoints are written to `/ephemeral/ckpts/base_pretrained.pt` every `save_every` steps and carry the
+Checkpoints are written to `models/base_pretrained.pt` every `save_every` steps and carry the
 config, so every later stage can rebuild the exact model with [`load_backbone_from_ckpt`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/utils.py).
 
 ➡️ Next: [Stage 2: SFT](03_sft.md).

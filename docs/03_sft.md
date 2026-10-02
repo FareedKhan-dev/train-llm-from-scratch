@@ -75,8 +75,8 @@ rows across DDP ranks and yields `(tokens, loss_mask, epoch)`.
 ## Run it
 
 ```bash
-PYTHONPATH=. python scripts/train_sft.py                                   # single GPU
-PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_sft.py # both GPUs
+python scripts/train_sft.py                                   # single GPU
+torchrun --standalone --nproc_per_node=2 scripts/train_sft.py # both GPUs
 # tune: --lr 1e-5 --epochs 3 --batch_size 16
 ```
 
@@ -89,7 +89,7 @@ PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_sft.py # bot
 - **GSM8K dev accuracy**: after SFT the model both follows instructions *and* emits the
   `<answer>…</answer>` format, so this should rise above the base model (see [08_evaluation.md](08_evaluation.md)).
 
-The result is saved to `/ephemeral/ckpts/sft.pt` and becomes the starting point for the reward model,
+The result is saved to `models/sft.pt` and becomes the starting point for the reward model,
 DPO, PPO and GRPO.
 
 ➡️ Next: [Stage 3: Reward Model](04_reward_model.md) or jump to [DPO](05_dpo.md).

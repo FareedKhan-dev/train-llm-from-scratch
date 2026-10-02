@@ -72,12 +72,12 @@ any padding-vocab ids (the model's vocab is padded to 50304 but r50k_base only d
 
 ```bash
 # instruction-tuned models (chat template applied automatically)
-PYTHONPATH=. python scripts/chat.py --ckpt /ephemeral/ckpts/sft.pt  --prompt "What is 13 + 29?"
-PYTHONPATH=. python scripts/chat.py --ckpt /ephemeral/ckpts/grpo.pt --prompt "..." --greedy
+python scripts/chat.py --ckpt models/sft.pt  --prompt "What is 13 + 29?"
+python scripts/chat.py --ckpt models/grpo.pt --prompt "..." --greedy
 # base-model continuation
-PYTHONPATH=. python scripts/chat.py --ckpt /ephemeral/ckpts/base_pretrained.pt --raw --prompt "Once upon a time"
+python scripts/chat.py --ckpt models/base_pretrained.pt --raw --prompt "Once upon a time"
 # interactive REPL (omit --prompt)
-PYTHONPATH=. python scripts/chat.py --ckpt /ephemeral/ckpts/sft.pt
+python scripts/chat.py --ckpt models/sft.pt
 ```
 
 Sampling controls: `--temperature`, `--top_p`, `--top_k`, or `--greedy` for deterministic argmax. Runs
