@@ -12,7 +12,8 @@ With [uv](https://docs.astral.sh/uv/) (fast, recommended):
 git clone https://github.com/FareedKhan-dev/train-llm-from-scratch.git
 cd train-llm-from-scratch
 uv sync                      # creates .venv with the package + test tools
-uv run pytest -q             # everything runs on a CPU in under a minute
+uv run pytest -q -m "not slow"   # the fast tests, CPU only
+uv run pytest -q                # everything, including the end-to-end run of every script
 ```
 
 With pip:
