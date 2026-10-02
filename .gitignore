@@ -12,9 +12,22 @@ dist/
 site/
 .superpowers/
 
-# data / model artifacts (kept on the /ephemeral disk, not committed)
+# local environments and tool caches
+.venv/
+.uv-cache/
+.hf-cache/
+.tools/
+node_modules/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# data / model artifacts (datasets, checkpoints and logs are never committed)
 data/
 models/
+logs/
 *.h5
 *.pt
 *.jsonl
