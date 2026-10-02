@@ -17,6 +17,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 from src.device import configure_cpu_threads, resolve_device
+from src.models.modern.moe import MoE
 
 
 @dataclass
@@ -74,11 +75,13 @@ def ddp_wrap(model: torch.nn.Module, ctx: DDPContext, find_unused_parameters: bo
     Pass ``find_unused_parameters=True`` for a model where some parameters do not receive a
     gradient on every step (for example the reward model, which uses the backbone's
     ``forward_hidden`` and a reward head but never its ``lm_head``). Without it, DDP raises
-    a "did not get a gradient" error on the first backward.
+    a "did not get a gradient" error on the first backward. Mixture-of-Experts models turn it
+    on automatically: an expert that no token picked in a step gets no gradient either.
     """
     if not ctx.enabled:
         return model
     device_ids = [ctx.local_rank] if ctx.device.startswith("cuda") else None
+    find_unused_parameters = find_unused_parameters or any(isinstance(m, MoE) for m in model.modules())
     return DDP(model, device_ids=device_ids, find_unused_parameters=find_unused_parameters)
 
 
