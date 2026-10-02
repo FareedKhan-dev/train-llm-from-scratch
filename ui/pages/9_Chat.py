@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 import glob
+import os
 
 import streamlit as st
 
 from ui import theme
+from ui.stages import CKPT_DIR
 
 theme.setup_page("Chat", "💬")
 theme.hero("💬  Chat", "Talk to any checkpoint — chat template for instruction models, raw mode for the base.")
 
-ckpts = sorted(glob.glob("/ephemeral/ckpts/*.pt"))
+ckpts = sorted(glob.glob(os.path.join(CKPT_DIR, "**", "*.pt"), recursive=True))
 if not ckpts:
-    st.warning("No checkpoints in /ephemeral/ckpts yet. Train a stage (or run a smoke job) first.")
+    st.warning("No checkpoints in models/ yet. Train a stage (or run a smoke job) first.")
     st.stop()
 
 with st.sidebar:

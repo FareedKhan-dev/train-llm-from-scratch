@@ -1,4 +1,4 @@
-"""Read the newest ``/ephemeral/logs/<prefix>_*.jsonl`` metrics file into a DataFrame."""
+"""Read the newest ``logs/<prefix>_*.jsonl`` metrics file into a DataFrame."""
 
 from __future__ import annotations
 

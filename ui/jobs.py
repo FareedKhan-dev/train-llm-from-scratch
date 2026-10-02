@@ -2,7 +2,7 @@
 Background job manager for the control panel.
 
 Launches the real training / data-prep scripts as detached subprocesses, captures their
-output to a logfile, and records a tiny JSON registry under /ephemeral/ui_jobs/ so jobs
+output to a logfile, and records a tiny JSON registry under logs/ui_jobs/ so jobs
 survive Streamlit reruns and page navigation. Includes a GPU-busy guard so we never start a
 second multi-GPU job on top of a running one (which would OOM the H100s).
 """
@@ -16,9 +16,9 @@ import subprocess
 import sys
 import time
 
-from ui.stages import REPO_ROOT
+from ui.stages import LOG_DIR, REPO_ROOT
 
-JOB_DIR = "/ephemeral/ui_jobs"
+JOB_DIR = os.path.join(LOG_DIR, "ui_jobs")
 _TORCHRUN = os.path.join(os.path.dirname(sys.executable), "torchrun")
 
 
@@ -85,7 +85,6 @@ def launch(job_id: str, argv: list[str], *, kind: str = "cpu") -> dict:
     log_path = _log(job_id)
     env = {**os.environ, "PYTHONPATH": REPO_ROOT}
     env.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
-    env.setdefault("HF_HOME", "/ephemeral/hf_cache")
     logf = open(log_path, "wb")
     proc = subprocess.Popen(
         argv, cwd=REPO_ROOT, env=env, stdout=logf, stderr=subprocess.STDOUT,
