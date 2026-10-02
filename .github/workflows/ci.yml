@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.2.0  # this action publishes no floating major tag
       - name: ruff
         run: uvx ruff check .
 
@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.2.0  # this action publishes no floating major tag
         with:
           python-version: "3.12"
       - name: Install (CPU-only torch)
@@ -54,7 +54,7 @@ jobs:
           - { os: macos-latest, python: "3.12" }
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.2.0  # this action publishes no floating major tag
         with:
           python-version: ${{ matrix.python }}
       - name: Install (CPU-only torch)
@@ -81,6 +81,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.2.0  # this action publishes no floating major tag
       - name: Build the documentation site (strict, catches broken links)
         run: uvx --with mkdocs-material --with pymdown-extensions mkdocs build --strict --site-dir site
