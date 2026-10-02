@@ -106,8 +106,6 @@ def gsm8k_accuracy(
 
 def load_gsm8k_eval(split: str = "test", limit: int | None = 200) -> list[tuple[str, str]]:
     """Load ``(question, answer_field)`` pairs from GSM8K for evaluation."""
-    import os
-    os.environ.setdefault("HF_HOME", "/ephemeral/hf_cache")
     from datasets import load_dataset
 
     ds = load_dataset("openai/gsm8k", "main", split=split)

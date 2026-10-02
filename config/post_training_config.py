@@ -16,12 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 
-
-# Shared paths (all heavy artifacts live on the 1.5TB /ephemeral disk).
-EPHEMERAL = "/ephemeral"
-CKPT_DIR = f"{EPHEMERAL}/ckpts"
-DATA_DIR = f"{EPHEMERAL}/data"
-LOG_DIR = f"{EPHEMERAL}/logs"
+from config.paths import CKPT_DIR, DATA_DIR, LOG_DIR
 
 
 @dataclass
@@ -34,7 +29,7 @@ class BaseModelConfig:
     n_blocks: int = 24
 
     # --- runtime ---
-    device: str = "cuda"
+    device: str = "auto"                # auto | cuda | mps | cpu
     amp_dtype: str | None = "bf16"      # None | "bf16"; bf16 needs no GradScaler on H100
     seed: int = 1337
     compile: bool = False               # torch.compile the model (big speedup, slow 1st step)
@@ -47,8 +42,8 @@ class BaseModelConfig:
 @dataclass
 class PretrainConfig(BaseModelConfig):
     """Pretrain the mid base model from scratch on the Pile HDF5 (mix in task text late)."""
-    train_path: str = "data/train/pile_train.h5"
-    dev_path: str = "data/val/pile_dev.h5"
+    train_path: str = f"{DATA_DIR}/pile_train.h5"
+    dev_path: str = f"{DATA_DIR}/pile_dev.h5"
     batch_size: int = 24                # per-GPU micro-batch
     grad_accum: int = 8                 # effective batch = batch_size * grad_accum * world
     train_steps: int = 200_000
@@ -67,6 +62,7 @@ class PretrainConfig(BaseModelConfig):
 class SFTConfig(BaseModelConfig):
     pretrained_ckpt: str = f"{CKPT_DIR}/base_pretrained.pt"
     data_path: str = f"{DATA_DIR}/sft_packed.h5"
+    dev_path: str = f"{DATA_DIR}/sft_dev_packed.h5"
     out_ckpt: str = f"{CKPT_DIR}/sft.pt"
     batch_size: int = 16
     grad_accum: int = 2
@@ -85,6 +81,7 @@ class SFTConfig(BaseModelConfig):
 class RewardConfig(BaseModelConfig):
     sft_ckpt: str = f"{CKPT_DIR}/sft.pt"
     pref_path: str = f"{DATA_DIR}/preferences.jsonl"
+    test_path: str = f"{DATA_DIR}/preferences_test.jsonl"
     out_ckpt: str = f"{CKPT_DIR}/reward.pt"
     batch_size: int = 8                 # pairs per step (2x sequences through the model)
     epochs: int = 1
@@ -101,6 +98,7 @@ class RewardConfig(BaseModelConfig):
 class DPOConfig(BaseModelConfig):
     sft_ckpt: str = f"{CKPT_DIR}/sft.pt"        # init policy + frozen reference
     pref_path: str = f"{DATA_DIR}/preferences.jsonl"
+    test_path: str = f"{DATA_DIR}/preferences_test.jsonl"
     out_ckpt: str = f"{CKPT_DIR}/dpo.pt"
     loss_type: str = "dpo"              # "dpo" | "orpo" | "kto"
     beta: float = 0.1

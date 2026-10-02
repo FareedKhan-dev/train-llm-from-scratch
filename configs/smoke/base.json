@@ -5,5 +5,7 @@
   "n_head": 4,
   "n_blocks": 2,
   "device": "cpu",
-  "amp_dtype": null
+  "amp_dtype": null,
+  "ckpt_dir": "models/smoke",
+  "log_dir": "logs/smoke"
 }

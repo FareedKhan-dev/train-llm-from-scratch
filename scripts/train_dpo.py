@@ -16,6 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # run from the repo without installing
 
+import os
 import time
 
 import torch
@@ -31,8 +32,6 @@ from src.post_training.rollout import sequence_logprobs
 from src.post_training.utils import (
     amp_autocast, load_backbone_from_ckpt, make_frozen_copy, save_stage_ckpt, set_seed, unwrap,
 )
-
-TEST_PATH = "/ephemeral/data/preferences_test.jsonl"
 
 
 def _logps(model, ids, mask, requires_grad):
@@ -61,8 +60,10 @@ def _compute_losses(policy, ref, batch, cfg, ctx):
 
 @torch.no_grad()
 def eval_implicit_acc(policy, ref, cfg, ctx, max_batches: int = 100) -> tuple[float, float]:
+    if not os.path.exists(cfg.test_path):
+        return float("nan"), float("nan")
     policy.eval()
-    it = get_preference_iterator(TEST_PATH, cfg.batch_size, cfg.max_len, device=ctx.device,
+    it = get_preference_iterator(cfg.test_path, cfg.batch_size, cfg.max_len, device=ctx.device,
                                  rank=ctx.rank, world_size=ctx.world_size, shuffle=False, infinite=False)
     acc, marg, n = 0.0, 0.0, 0
     for batch in it:
@@ -86,7 +87,7 @@ def main():
     policy = ddp_wrap(policy, ctx)
     optimizer = configure_optimizer(unwrap(policy), cfg.lr, cfg.weight_decay)
 
-    with open(cfg.pref_path) as f:
+    with open(cfg.pref_path, encoding="utf-8") as f:
         n_rows = sum(1 for line in f if line.strip())
     total_steps = max(1, (n_rows // (cfg.batch_size * ctx.world_size)) * cfg.epochs)
 

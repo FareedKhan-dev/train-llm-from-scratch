@@ -5,11 +5,11 @@ Model dimensions are read from the checkpoint, so you only pass the path. Use th
 template for instruction-tuned models, or --raw for base-model continuation.
 
 One-shot:
-    python scripts/chat.py --ckpt /ephemeral/ckpts/sft.pt --prompt "What is 13 + 29?"
-    python scripts/chat.py --ckpt /ephemeral/ckpts/grpo.pt --prompt "..." --greedy
-    python scripts/chat.py --ckpt /ephemeral/ckpts/base_pretrained.pt --raw --prompt "Once upon a time"
+    python scripts/chat.py --ckpt models/sft.pt --prompt "What is 13 + 29?"
+    python scripts/chat.py --ckpt models/grpo.pt --prompt "..." --greedy
+    python scripts/chat.py --ckpt models/base_pretrained.pt --raw --prompt "Once upon a time"
 Interactive REPL (no --prompt):
-    python scripts/chat.py --ckpt /ephemeral/ckpts/sft.pt
+    python scripts/chat.py --ckpt models/sft.pt
 """
 
 from __future__ import annotations

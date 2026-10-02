@@ -1,7 +1,8 @@
 {
-  "pretrained_ckpt": "/ephemeral/ckpts/base_pretrained.pt",
-  "data_path": "/ephemeral/data/sft_packed.h5",
-  "out_ckpt": "/ephemeral/ckpts/sft.pt",
+  "pretrained_ckpt": "models/base_pretrained.pt",
+  "data_path": "data/sft_packed.h5",
+  "dev_path": "data/sft_dev_packed.h5",
+  "out_ckpt": "models/sft.pt",
   "batch_size": 16,
   "grad_accum": 2,
   "epochs": 3,

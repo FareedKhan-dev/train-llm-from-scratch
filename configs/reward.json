@@ -1,7 +1,8 @@
 {
-  "sft_ckpt": "/ephemeral/ckpts/sft.pt",
-  "pref_path": "/ephemeral/data/preferences.jsonl",
-  "out_ckpt": "/ephemeral/ckpts/reward.pt",
+  "sft_ckpt": "models/sft.pt",
+  "pref_path": "data/preferences.jsonl",
+  "test_path": "data/preferences_test.jsonl",
+  "out_ckpt": "models/reward.pt",
   "batch_size": 8,
   "epochs": 1,
   "eval_steps": 200,

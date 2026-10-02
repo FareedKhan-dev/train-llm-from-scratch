@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # run from the rep
 
 import contextlib
 import math
+import os
 import time
 
 import torch
@@ -32,11 +33,11 @@ from src.post_training.optim import configure_optimizer, cosine_lr
 from src.post_training.sft import sft_loss
 from src.post_training.utils import amp_autocast, load_backbone_from_ckpt, save_stage_ckpt, set_seed, unwrap
 
-DEV_PATH = "/ephemeral/data/sft_dev_packed.h5"
-
 
 @torch.no_grad()
 def eval_dev(model, cfg, ctx, dev_path: str, max_batches: int = 50) -> float:
+    if not os.path.exists(dev_path):
+        return float("nan")
     model.eval()
     it = get_sft_batch_iterator(dev_path, cfg.batch_size, device=ctx.device,
                                 rank=ctx.rank, world_size=ctx.world_size, shuffle=False, infinite=False)
@@ -105,7 +106,7 @@ def main():
                 logger.log(step, {"train_loss": loss.item(), "lr": lr})
 
         if step > 0 and step % cfg.eval_steps == 0:
-            dev = reduce_scalar(eval_dev(model, cfg, ctx, DEV_PATH), ctx)
+            dev = reduce_scalar(eval_dev(model, cfg, ctx, cfg.dev_path), ctx)
             if ctx.is_main:
                 print(f"  [eval] step {step} | dev_loss {dev:.4f} | dev_ppl {math.exp(min(20, dev)):.2f}")
                 if logger:
@@ -119,7 +120,7 @@ def main():
         # Use the unwrapped model for the final eval: the other ranks have already reached
         # cleanup(), so calling the DDP-wrapped model here would launch a collective with no
         # peer and hang (NCCL timeout). The periodic eval above runs on all ranks, so it is fine.
-        dev = eval_dev(unwrap(model), cfg, ctx, DEV_PATH)
+        dev = eval_dev(unwrap(model), cfg, ctx, cfg.dev_path)
         save_stage_ckpt(cfg.out_ckpt, model, optimizer, stage="sft", cfg=cfg, step=total_steps,
                         metrics={"dev_loss": dev})
         print(f"Done SFT. dev_loss {dev:.4f} -> {cfg.out_ckpt}")

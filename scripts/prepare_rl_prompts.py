@@ -6,7 +6,7 @@ Build RL prompt sets ({"prompt", "gold"}) for PPO/GRPO:
     where even a weak model gets some non-zero reward so RL has signal to start from)
 
 Example:
-    HF_HOME=/ephemeral/hf_cache python scripts/prepare_rl_prompts.py --out_dir /ephemeral/data
+    python scripts/prepare_rl_prompts.py --out_dir data
 """
 
 from __future__ import annotations
@@ -21,7 +21,6 @@ import json
 import os
 import random
 
-os.environ.setdefault("HF_HOME", "/ephemeral/hf_cache")
 
 from src.post_training.rewards import gsm8k_gold_answer
 
@@ -61,7 +60,7 @@ def arithmetic_prompts(n: int, max_val: int, seed: int):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--out_dir", default="/ephemeral/data")
+    p.add_argument("--out_dir", default="data")
     p.add_argument("--train_limit", type=int, default=None)
     p.add_argument("--test_limit", type=int, default=500)
     p.add_argument("--arith_n", type=int, default=5000)

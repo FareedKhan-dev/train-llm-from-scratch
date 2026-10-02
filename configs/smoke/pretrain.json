@@ -1,10 +1,11 @@
 {
+  "train_path": "data/pile_train.h5",
+  "dev_path": "data/pile_dev.h5",
+  "out_ckpt": "models/smoke/base_pretrained.pt",
   "batch_size": 4,
   "grad_accum": 1,
   "train_steps": 20,
   "eval_steps": 10000,
   "warmup_steps": 2,
-  "save_every": 10000,
-  "train_path": "/ephemeral/data/pile_train.h5",
-  "dev_path": "/ephemeral/data/pile_dev.h5"
+  "save_every": 10000
 }

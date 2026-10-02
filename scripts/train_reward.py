@@ -17,6 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # run from the repo without installing
 
+import os
 import time
 
 import torch
@@ -31,9 +32,6 @@ from src.post_training.reward_model import RewardModel
 from src.post_training.reward_train import bradley_terry_loss, preference_accuracy, reward_margin
 from src.post_training.utils import amp_autocast, load_backbone_from_ckpt, save_stage_ckpt, set_seed, unwrap
 
-TEST_PATH = "/ephemeral/data/preferences_test.jsonl"
-
-
 def _pair_rewards(rm, batch, cfg, ctx):
     """Forward chosen+rejected in one pass; return (chosen_rewards, rejected_rewards)."""
     B = batch["chosen_ids"].size(0)
@@ -46,8 +44,10 @@ def _pair_rewards(rm, batch, cfg, ctx):
 
 @torch.no_grad()
 def eval_accuracy(rm, cfg, ctx, max_batches: int = 100) -> tuple[float, float]:
+    if not os.path.exists(cfg.test_path):
+        return float("nan"), float("nan")
     rm.eval()
-    it = get_preference_iterator(TEST_PATH, cfg.batch_size, cfg.max_len, device=ctx.device,
+    it = get_preference_iterator(cfg.test_path, cfg.batch_size, cfg.max_len, device=ctx.device,
                                  rank=ctx.rank, world_size=ctx.world_size, shuffle=False, infinite=False)
     acc, marg, n = 0.0, 0.0, 0
     for batch in it:
@@ -74,8 +74,7 @@ def main():
     rm = ddp_wrap(rm, ctx, find_unused_parameters=True)
     optimizer = configure_optimizer(unwrap(rm), cfg.lr, cfg.weight_decay)
 
-    import json
-    with open(cfg.pref_path) as f:
+    with open(cfg.pref_path, encoding="utf-8") as f:
         n_rows = sum(1 for line in f if line.strip())
     total_steps = max(1, (n_rows // (cfg.batch_size * ctx.world_size)) * cfg.epochs)
 

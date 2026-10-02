@@ -4,12 +4,12 @@
   "n_embed": 1024,
   "n_head": 16,
   "n_blocks": 24,
-  "device": "cuda",
+  "device": "auto",
   "amp_dtype": "bf16",
   "seed": 1337,
   "compile": false,
-  "ckpt_dir": "/ephemeral/ckpts",
-  "log_dir": "/ephemeral/logs",
+  "ckpt_dir": "models",
+  "log_dir": "logs",
   "use_wandb": false,
   "wandb_project": "train-llm-from-scratch-posttrain"
 }

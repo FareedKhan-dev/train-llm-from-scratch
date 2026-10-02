@@ -1,4 +1,6 @@
 {
+  "sft_ckpt": "models/smoke/sft.pt",
+  "out_ckpt": "models/smoke/reward.pt",
   "batch_size": 4,
   "epochs": 1,
   "eval_steps": 10000,
