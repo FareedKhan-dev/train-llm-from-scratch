@@ -25,6 +25,7 @@ from src.checkpoint import (
     unwrap_model,
 )
 from src.models.factory import LanguageModel, build_model
+from src.models.modern import ModernTransformer
 
 
 def amp_autocast(amp_dtype: str | None, device: str):
@@ -90,6 +91,19 @@ def load_backbone_from_ckpt(cfg: Any, ckpt_path: str, device: str) -> LanguageMo
 def unwrap(model: nn.Module) -> nn.Module:
     """Return the plain model behind DDP and torch.compile wrappers (or the model itself)."""
     return unwrap_model(model)
+
+
+def moe_balance_loss(model: nn.Module) -> torch.Tensor | float:
+    """The Mixture-of-Experts balancing loss of the last forward pass, times its coefficient.
+
+    The modern model adds this loss itself only when it is given targets. The post-training
+    losses are computed outside the model, so the stages add it with this helper. It is 0 for
+    dense models.
+    """
+    inner = unwrap(model)
+    if isinstance(inner, ModernTransformer) and inner.aux_loss is not None:
+        return inner.config.moe_aux_loss_coef * inner.aux_loss
+    return 0.0
 
 
 def make_frozen_copy(model: nn.Module, device: str | None = None) -> nn.Module:

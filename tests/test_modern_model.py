@@ -187,6 +187,21 @@ def test_moe_loss_includes_aux_and_active_params_are_smaller() -> None:
     assert model.active_params() < model.num_params()
 
 
+def test_post_training_adds_the_moe_balancing_loss() -> None:
+    from src.models.transformer import Transformer
+    from src.post_training.utils import moe_balance_loss
+
+    model = _model(VARIANTS["moe"])
+    logits, _ = model(torch.randint(0, BASE.vocab_size, (2, 8)))  # no targets, like the SFT trainer
+    extra = moe_balance_loss(torch.nn.DataParallel(model))  # wrappers are looked through
+    assert isinstance(extra, torch.Tensor) and model.aux_loss is not None
+    assert torch.allclose(extra, BASE.moe_aux_loss_coef * model.aux_loss)
+    extra.backward()
+    assert model.blocks[0].mlp.router.weight.grad is not None
+    assert moe_balance_loss(_model(BASE)) == 0.0  # dense modern model
+    assert moe_balance_loss(Transformer(n_head=2, n_embed=16, context_length=8, vocab_size=32, N_BLOCKS=1)) == 0.0
+
+
 def test_tied_embeddings_share_one_matrix() -> None:
     tied, untied = _model(BASE), _model(replace(BASE, tie_embeddings=False))
     assert tied.lm_head.weight is tied.token_embed.weight

@@ -33,7 +33,14 @@ from src.post_training.distributed import cleanup, ddp_setup, ddp_wrap, reduce_s
 from src.post_training.logging_utils import MetricsLogger
 from src.post_training.optim import configure_optimizer, cosine_lr, set_lr
 from src.post_training.sft import sft_loss
-from src.post_training.utils import amp_autocast, load_backbone_from_ckpt, save_stage_ckpt, set_seed, unwrap
+from src.post_training.utils import (
+    amp_autocast,
+    load_backbone_from_ckpt,
+    moe_balance_loss,
+    save_stage_ckpt,
+    set_seed,
+    unwrap,
+)
 
 
 @torch.no_grad()
@@ -113,9 +120,11 @@ def main():
             sync = micro == cfg.grad_accum - 1 or not ctx.enabled
             with (contextlib.nullcontext() if sync else model.no_sync()), amp_autocast(cfg.amp_dtype, ctx.device):
                 logits, _ = model(tokens)
-                loss = sft_loss(logits, tokens, mask) / cfg.grad_accum
+                ce = sft_loss(logits, tokens, mask)
+                # Mixture-of-Experts models also keep their experts balanced (0 for dense models)
+                loss = (ce + moe_balance_loss(model)) / cfg.grad_accum
             loss.backward()
-            loss_sum += loss.item()
+            loss_sum += ce.item() / cfg.grad_accum  # log the plain SFT loss
         if epoch >= cfg.epochs and cfg.max_steps <= 0:
             break
         loss = torch.tensor(loss_sum)
