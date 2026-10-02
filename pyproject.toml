@@ -4,23 +4,23 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "train-llm-from-scratch"
-version = "0.1.0"
-description = "Train an LLM from scratch in pure PyTorch — pretraining through SFT, Reward Modeling, PPO, DPO and GRPO/RLVR."
+version = "0.2.0"
+description = "Train an LLM from scratch in pure PyTorch: pretraining, SFT, reward modeling, PPO, DPO and GRPO, on a GPU or a laptop CPU."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { text = "MIT" }
-# Core deps for the model + data path. (The teaching pretraining path also has
-# requirements.txt with cu118 wheels; this project install does not pin a CUDA build —
-# install the right torch wheel for your machine first if needed.)
+# Core deps for the model + data path. torch is not pinned to a CUDA build: on Linux the
+# default PyPI wheel ships CUDA, on Windows and macOS it is the CPU / MPS build. See the
+# README for picking a specific build.
 dependencies = [
-    "torch",
+    "torch>=2.3",
     "numpy",
     "h5py",
     "tqdm",
     "tiktoken",
     "zstandard",
     "requests",
-    "jaxtyping",
+    "jaxtyping>=0.2.28",
     "regex",
 ]
 
@@ -34,11 +34,88 @@ docs = ["mkdocs", "mkdocs-material", "pymdown-extensions"]
 # Everything, for development.
 all = ["datasets", "wandb", "streamlit", "pandas", "altair", "mkdocs", "mkdocs-material", "pymdown-extensions"]
 
+[dependency-groups]
+# Tests, linting and type checking: `uv sync` installs this group by default.
+dev = [
+    "pytest>=8",
+    "beartype>=0.18",
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "matplotlib",
+]
+
 # Make the existing import roots installable so `pip install -e .` removes the need for
 # `PYTHONPATH=.`. These packages already exist in the repo (additive __init__.py only).
 [tool.setuptools]
-packages = ["config", "data_loader", "src", "src.models", "src.post_training", "src.post_training.rewards", "ui"]
+packages = [
+    "config",
+    "data_loader",
+    "src",
+    "src.inference",
+    "src.models",
+    "src.models.modern",
+    "src.optim",
+    "src.post_training",
+    "src.post_training.rewards",
+    "src.tokenizer",
+    "ui",
+]
 
 [tool.setuptools.package-data]
-# ship the JSON configs alongside the package
-"*" = ["*.json"]
+# ship the JSON configs and the type-checking marker alongside the package
+"*" = ["*.json", "py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"
+markers = ["slow: end-to-end runs of the training scripts (deselect with -m 'not slow')"]
+filterwarnings = ["ignore::DeprecationWarning:torch.*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+extend-exclude = ["*.ipynb", "data", "models", "logs"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "W", "B", "UP", "I"]
+ignore = [
+    "E702",  # the trainers keep short `a; b` bookkeeping on one line
+    "E731",  # small lambdas are clearer than defs in a few places
+    "E741",  # `l` is a natural name in math code
+    "B905",  # zip(strict=...) would change behavior on a length mismatch
+    "F722",  # jaxtyping shape strings such as "batch seq" are not forward references
+]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*.py" = ["E402"]  # scripts put the repo root on sys.path before importing it
+
+[tool.ruff.lint.isort]
+known-first-party = ["config", "data_loader", "scripts", "src", "ui"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["src", "config", "data_loader"]
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+# The code added for this update is fully annotated; keep it that way.
+[[tool.mypy.overrides]]
+module = [
+    "config.loader",
+    "config.paths",
+    "config.post_training_config",
+    "config.presets",
+    "src.checkpoint",
+    "src.device",
+    "src.inference.*",
+    "src.models.factory",
+    "src.models.lora",
+    "src.models.modern.*",
+    "src.optim.*",
+    "src.tokenizer.*",
+]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
