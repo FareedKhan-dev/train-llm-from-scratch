@@ -21,6 +21,7 @@ dependencies = [
     "zstandard",
     "requests",
     "jaxtyping",
+    "regex",
 ]
 
 [project.optional-dependencies]
