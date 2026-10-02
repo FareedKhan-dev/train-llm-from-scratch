@@ -12,10 +12,9 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 
-import torch as _torch
-
+from src.checkpoint import load_checkpoint, model_state_from_checkpoint
 from src.models.transformer import Transformer
-from src.post_training.utils import build_model_from_config, gather_last, unwrap
+from src.post_training.utils import build_model_from_config, gather_last
 
 
 def load_reward_model(cfg, ckpt_path: str, device: str) -> "RewardModel":
@@ -23,10 +22,7 @@ def load_reward_model(cfg, ckpt_path: str, device: str) -> "RewardModel":
     checkpoint saved by ``scripts/train_reward.py``."""
     backbone = build_model_from_config(cfg)
     rm = RewardModel(backbone)
-    ck = _torch.load(ckpt_path, map_location="cpu", weights_only=False)
-    state = ck["model_state_dict"] if "model_state_dict" in ck else ck
-    if any(k.startswith("module.") for k in state):
-        state = {k.removeprefix("module."): v for k, v in state.items()}
+    state = model_state_from_checkpoint(load_checkpoint(ckpt_path, map_location="cpu"))
     rm.load_state_dict(state, strict=True)
     rm.to(device).eval()
     for p in rm.parameters():

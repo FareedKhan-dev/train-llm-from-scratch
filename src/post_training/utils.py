@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import contextlib
 import copy
-import os
 import random
 from dataclasses import asdict, is_dataclass
 from typing import Any
@@ -17,6 +16,14 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from src.checkpoint import (
+    atomic_save,
+    load_checkpoint,
+    load_model_weights,
+    model_state_from_checkpoint,
+    strip_wrapper_prefixes,
+    unwrap_model,
+)
 from src.models.transformer import Transformer
 
 
@@ -64,36 +71,30 @@ def build_model_from_config(cfg: Any) -> Transformer:
     )
 
 
-def _strip_ddp_prefix(state_dict: dict) -> dict:
-    """Remove a leading ``module.`` from keys saved by DistributedDataParallel."""
-    if any(k.startswith("module.") for k in state_dict):
-        return {k.removeprefix("module."): v for k, v in state_dict.items()}
-    return state_dict
+# Kept for code that imported the old private name; it now also strips torch.compile's
+# ``_orig_mod.`` prefix (issue #36).
+_strip_ddp_prefix = strip_wrapper_prefixes
 
 
 def load_backbone_from_ckpt(cfg: Any, ckpt_path: str, device: str) -> Transformer:
     """
     Build a Transformer from ``cfg`` and load backbone weights from a checkpoint saved
     by the pretraining script or any post-training stage (``model_state_dict`` key).
-    DDP ``module.`` prefixes are stripped. Auxiliary head weights (value/reward), if
-    present, are ignored here -- wrappers add their own fresh heads.
+
+    DDP (``module.``) and torch.compile (``_orig_mod.``) prefixes are stripped. Auxiliary
+    head weights (value/reward), if present, are ignored here because wrappers add their own
+    fresh heads. A checkpoint that does not cover every backbone parameter raises an error
+    instead of silently leaving random weights in place.
     """
     model = build_model_from_config(cfg)
-    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-    state = ckpt["model_state_dict"] if "model_state_dict" in ckpt else ckpt
-    state = _strip_ddp_prefix(state)
-    # Keep only keys that belong to the bare Transformer backbone.
-    backbone_keys = set(model.state_dict().keys())
-    filtered = {k: v for k, v in state.items() if k in backbone_keys}
-    missing, unexpected = model.load_state_dict(filtered, strict=False)
-    if missing:
-        print(f"[load_backbone] {len(missing)} missing keys (e.g. {missing[:3]})")
+    state = model_state_from_checkpoint(load_checkpoint(ckpt_path, map_location="cpu"))
+    load_model_weights(model, state, source=ckpt_path)
     return model.to(device)
 
 
 def unwrap(model: nn.Module) -> nn.Module:
-    """Return the underlying module behind a DDP wrapper (or the model itself)."""
-    return model.module if hasattr(model, "module") else model
+    """Return the plain model behind DDP and torch.compile wrappers (or the model itself)."""
+    return unwrap_model(model)
 
 
 def make_frozen_copy(model: nn.Module, device: str | None = None) -> nn.Module:
@@ -159,10 +160,9 @@ def save_stage_ckpt(
     """
     Save a checkpoint in the repo's existing shape (``model_state_dict`` /
     ``optimizer_state_dict``) plus post-training metadata (``stage``, ``cfg``, ``step``,
-    ``metrics``). DDP wrappers are unwrapped first so checkpoints load cleanly on a
-    single GPU.
+    ``metrics``). DDP and torch.compile wrappers are unwrapped first so the keys are clean
+    and the file loads into a bare model on any device. The write is atomic.
     """
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     payload = {
         "model_state_dict": unwrap(model).state_dict(),
         "optimizer_state_dict": optimizer.state_dict() if optimizer is not None else None,
@@ -175,4 +175,4 @@ def save_stage_ckpt(
     }
     if extra:
         payload.update(extra)
-    torch.save(payload, path)
+    atomic_save(payload, path)

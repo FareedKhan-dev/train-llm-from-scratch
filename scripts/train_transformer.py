@@ -19,6 +19,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from config.config import default_config as config
+from src.checkpoint import model_state_from_checkpoint
 from src.models.transformer import Transformer
 
 
@@ -241,7 +242,8 @@ def restore_training_checkpoint(
     is treated as the number of completed optimizer steps.
     """
     checkpoint = load_checkpoint_file(path, device)
-    model.load_state_dict(checkpoint['model_state_dict'])
+    # Strip DDP / torch.compile key prefixes so checkpoints saved from a wrapped model load too.
+    model.load_state_dict(model_state_from_checkpoint(checkpoint))
 
     optimizer_state = checkpoint.get('optimizer_state_dict')
     if optimizer_state:

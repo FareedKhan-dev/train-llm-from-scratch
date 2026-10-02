@@ -21,25 +21,11 @@ import os
 
 import torch
 
-from src.models.transformer import Transformer
 from src.post_training.evaluation import gsm8k_accuracy, load_gsm8k_eval
+from src.post_training.inference import load_model_from_ckpt
 
-
-def model_from_ckpt(ckpt_path: str, device: str, overrides: dict | None = None) -> Transformer:
-    ck = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-    cfg = ck.get("cfg", {}) or {}
-    cfg = {**cfg, **(overrides or {})}
-    model = Transformer(
-        n_head=cfg.get("n_head", 16), n_embed=cfg.get("n_embed", 1024),
-        context_length=cfg.get("context_length", 1024), vocab_size=cfg.get("vocab_size", 50304),
-        N_BLOCKS=cfg.get("n_blocks", 24),
-    )
-    state = ck["model_state_dict"] if "model_state_dict" in ck else ck
-    state = {k.removeprefix("module.").removeprefix("transformer."): v for k, v in state.items()}
-    backbone_keys = set(model.state_dict().keys())
-    filtered = {k: v for k, v in state.items() if k in backbone_keys}
-    model.load_state_dict(filtered, strict=False)
-    return model.to(device).eval()
+# Kept so older notebooks that imported this name keep working.
+model_from_ckpt = load_model_from_ckpt
 
 
 def print_table(path: str):
@@ -67,7 +53,7 @@ def main():
         print_table(args.table)
         return
 
-    model = model_from_ckpt(args.ckpt, args.device)
+    model = load_model_from_ckpt(args.ckpt, args.device)
     qa = load_gsm8k_eval(args.split, limit=args.limit)
     res = gsm8k_accuracy(model, qa, device=args.device, max_new_tokens=args.max_new_tokens,
                          greedy=True, return_samples=args.samples)
