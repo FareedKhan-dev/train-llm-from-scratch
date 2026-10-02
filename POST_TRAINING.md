@@ -185,7 +185,7 @@ any external service); pass `--use_wandb true` to also mirror to Weights & Biase
   bounded format bonus; a KL-to-reference penalty anchors RL to the SFT policy.
 - **Two architectures, one pipeline.** `"arch": "modern"` in `configs/base.json` switches every
   stage to the modern decoder (RoPE, RMSNorm, SwiGLU, GQA or MLA, optional MoE); see
-  [docs/modern](docs/modern/README.md). Its rollouts, evaluation and chat decode with a KV cache.
+  [docs/modern](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/docs/modern/README.md). Its rollouts, evaluation and chat decode with a KV cache.
 
 ## Tests
 
