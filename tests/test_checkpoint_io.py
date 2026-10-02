@@ -19,6 +19,7 @@ from config.post_training_config import SFTConfig, smoke
 from src.checkpoint import (
     load_checkpoint,
     load_model_weights,
+    model_state_from_checkpoint,
     strip_wrapper_prefixes,
     unwrap_model,
 )
@@ -110,6 +111,19 @@ def test_legacy_checkpoint_dims_are_read_from_config(tmp_path: str) -> None:
     path = os.path.join(tmp_path, "legacy.pt")
     torch.save({"model_state_dict": model.state_dict(), "config": config}, path)
     assert _weights_equal(load_model_from_ckpt(path, "cpu"), model)
+
+
+def test_causal_masks_are_not_saved_and_old_checkpoints_with_them_still_load(tmp_path: str) -> None:
+    """Every classic head used to save its (context x context) mask: ~1.6 GiB in the 400M config."""
+    model = Transformer(n_head=4, n_embed=32, context_length=64, vocab_size=50, N_BLOCKS=2)
+    assert not any(k.endswith(".tril") for k in model.state_dict())
+    masks = {f"attn_blocks.{b}.attn.heads.{h}.tril": torch.tril(torch.ones(64, 64)) for b in range(2) for h in range(4)}
+    path = os.path.join(tmp_path, "old_format.pt")
+    torch.save({"model_state_dict": {**model.state_dict(), **masks}}, path)
+
+    fresh = Transformer(n_head=4, n_embed=32, context_length=64, vocab_size=50, N_BLOCKS=2)
+    fresh.load_state_dict(model_state_from_checkpoint(load_checkpoint(path)))  # strict, like resume does
+    assert _weights_equal(fresh, model)
 
 
 def test_missing_parameters_fail_loudly(cfg: SFTConfig) -> None:

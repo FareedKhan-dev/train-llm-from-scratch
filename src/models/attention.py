@@ -31,8 +31,9 @@ class Head(nn.Module):
         self.key = nn.Linear(n_embed, head_size, bias=False)   # Key projection
         self.query = nn.Linear(n_embed, head_size, bias=False) # Query projection
         self.value = nn.Linear(n_embed, head_size, bias=False) # Value projection
-        # Lower triangular matrix for causal masking
-        self.register_buffer('tril', torch.tril(torch.ones(context_length, context_length)))
+        # Lower triangular matrix for causal masking. It is rebuilt here every time, so it is not
+        # saved in checkpoints (persistent=False); each head has one, which adds up quickly.
+        self.register_buffer('tril', torch.tril(torch.ones(context_length, context_length)), persistent=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """

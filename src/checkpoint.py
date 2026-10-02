@@ -78,9 +78,12 @@ def model_state_from_checkpoint(
     """Return the model weights of a checkpoint with wrapper prefixes removed.
 
     Accepts both our checkpoint dicts (weights under ``model_state_dict``) and raw state dicts.
+    Older checkpoints of the classic model also stored every head's causal mask (``.tril``);
+    the model rebuilds those masks itself now, so they are dropped here and old files still load.
     """
     state = checkpoint["model_state_dict"] if "model_state_dict" in checkpoint else checkpoint
-    return strip_wrapper_prefixes(state, extra_prefixes)
+    cleaned = strip_wrapper_prefixes(state, extra_prefixes)
+    return {k: v for k, v in cleaned.items() if not k.endswith(".tril")}
 
 
 def model_config_from_checkpoint(checkpoint: Mapping[str, Any]) -> dict[str, Any]:
