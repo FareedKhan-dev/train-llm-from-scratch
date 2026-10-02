@@ -30,6 +30,8 @@ and checks itself with typed configs, shape-checked tests and CI.
   experimental, untested TPU path through PyTorch/XLA (`--device xla`), for #8.
 - **Tools**: `scripts/benchmark.py` measures training speed per preset on your machine, and
   `scripts/model_report.py` estimates parameters, FLOPs, memory and training time.
+  `train_transformer.py --set KEY=VALUE` overrides any config value, the modern model's options
+  included.
 - **Type safety**: typed and validated configs with clear errors (unknown keys, wrong types,
   impossible shapes), jaxtyping shape annotations checked at runtime in the tests, mypy (strict
   for the new modules), and `py.typed` markers.
@@ -51,6 +53,8 @@ and checks itself with typed configs, shape-checked tests and CI.
 - The classic model no longer stores its causal masks in checkpoints (about 1.6 GiB in the
   400M-parameter configuration); older checkpoints still load.
 - `scripts/chat.py` picks its device automatically instead of assuming CUDA.
+- PPO and GRPO rollouts, evaluation and chat decode with the KV cache when the model is the
+  modern one (more than 5x faster rollouts in a CPU test).
 - Requires Python 3.10 or newer.
 
 ### Fixed
@@ -67,5 +71,9 @@ and checks itself with typed configs, shape-checked tests and CI.
 - The Streamlit control panel's job status and stop button did not work on Windows and macOS.
 - The shell helpers referred to the original author's virtual environment and disk.
 - `requirements.txt` was missing dependencies used by the new code.
+- With `--filter_groups`, skipped groups shrank GRPO's per-answer loss averages (the paper's
+  average, Dr. GRPO and GSPO), like a random learning-rate cut.
+- Mixture-of-Experts models crashed multi-GPU training when an expert got no tokens in a step.
+- SFT left out the Mixture-of-Experts balancing loss.
 
 Earlier changes are in the git history.
