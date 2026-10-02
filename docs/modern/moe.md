@@ -52,6 +52,10 @@ routing both are `1/E` and the loss is 1; as routing piles onto a few experts it
 loss, averaged over the MoE layers. `tests/test_modern_model.py` checks that the gradient of
 this loss reaches the router.
 
+Pretraining and SFT add this loss (`moe_balance_loss()` in `src/post_training/utils.py`). The
+preference and RL stages, which move the model much less, do not, like most fine-tuning
+setups; watch `tokens_per_expert` if you run them for long on an MoE model.
+
 DeepSeek-V3 replaced this loss with a per-expert bias that is nudged up or down after each
 step depending on the expert's load, which balances without pulling on the main objective.
 It is a nice extension exercise.
