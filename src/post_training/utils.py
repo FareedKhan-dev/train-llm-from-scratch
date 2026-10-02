@@ -24,6 +24,7 @@ from src.checkpoint import (
     strip_wrapper_prefixes,
     unwrap_model,
 )
+from src.models.factory import build_model
 from src.models.transformer import Transformer
 
 
@@ -58,17 +59,12 @@ def _cfg_get(cfg: Any, key: str) -> Any:
 
 def build_model_from_config(cfg: Any) -> Transformer:
     """
-    Construct a fresh :class:`Transformer` from a config carrying the standard keys
-    ``n_head, n_embed, context_length, vocab_size, n_blocks``. Works with the new
-    post-training dataclasses and with the legacy ``default_config`` dict.
+    Construct a fresh model from a config carrying the standard keys
+    ``n_head, n_embed, context_length, vocab_size, n_blocks`` (plus ``arch`` and the modern
+    model's settings, when present). Works with the post-training dataclasses and with the
+    legacy ``default_config`` dict.
     """
-    return Transformer(
-        n_head=_cfg_get(cfg, "n_head"),
-        n_embed=_cfg_get(cfg, "n_embed"),
-        context_length=_cfg_get(cfg, "context_length"),
-        vocab_size=_cfg_get(cfg, "vocab_size"),
-        N_BLOCKS=_cfg_get(cfg, "n_blocks"),
-    )
+    return build_model(cfg)  # type: ignore[return-value]  # either architecture fits the interface
 
 
 # Kept for code that imported the old private name; it now also strips torch.compile's

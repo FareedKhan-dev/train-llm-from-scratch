@@ -1,4 +1,5 @@
 {
+  "arch": "classic",
   "vocab_size": 50304,
   "context_length": 256,
   "n_embed": 128,

@@ -24,6 +24,8 @@ from typing import Literal, TypeVar
 
 from config.paths import CKPT_DIR, DATA_DIR, LOG_DIR
 
+Arch = Literal["classic", "modern"]
+AttentionKind = Literal["gqa", "mla"]
 AmpDtype = Literal["bf16", "fp16"]
 PreferenceLoss = Literal["dpo", "orpo", "kto"]
 RewardSource = Literal["verifier", "rm"]
@@ -41,11 +43,25 @@ def _check(cond: bool, message: str) -> None:
 @dataclass
 class BaseModelConfig:
     # --- model architecture (must match across all stages + the pretrained ckpt) ---
+    arch: Arch = "classic"  # "classic" = the original Transformer, "modern" = Llama-style
     vocab_size: int = 50304
     context_length: int = 1024
     n_embed: int = 1024
     n_head: int = 16
     n_blocks: int = 24
+
+    # --- modern architecture only (ignored when arch="classic"), see src/models/modern ---
+    n_kv_head: int | None = None  # grouped-query attention; None = one KV head per query head
+    attention: AttentionKind = "gqa"  # "mla" = DeepSeek multi-head latent attention
+    kv_latent_dim: int | None = None  # MLA latent size; None = n_embed // 4
+    rope_theta: float = 10_000.0
+    qk_norm: bool = True
+    attn_gate: bool = False
+    sliding_window: int | None = None
+    tie_embeddings: bool = True
+    n_experts: int = 0  # > 0 = Mixture of Experts
+    moe_top_k: int = 2
+    n_shared_experts: int = 0
 
     # --- runtime ---
     device: str = "auto"  # auto | cuda | mps | cpu
@@ -62,6 +78,12 @@ class BaseModelConfig:
             _check(getattr(self, name) > 0, f"{name} must be positive, got {getattr(self, name)}")
         _check(self.n_embed % self.n_head == 0,
                f"n_embed ({self.n_embed}) must be divisible by n_head ({self.n_head})")
+        if self.n_kv_head is not None:
+            _check(self.n_kv_head > 0 and self.n_head % self.n_kv_head == 0,
+                   f"n_head ({self.n_head}) must be divisible by n_kv_head ({self.n_kv_head})")
+        _check(self.n_experts >= 0, "n_experts must be >= 0")
+        if self.n_experts:
+            _check(1 <= self.moe_top_k <= self.n_experts, "moe_top_k must be between 1 and n_experts")
 
 
 @dataclass

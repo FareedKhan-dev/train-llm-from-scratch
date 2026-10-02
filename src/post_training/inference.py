@@ -17,6 +17,7 @@ from src.checkpoint import (
     model_config_from_checkpoint,
     model_state_from_checkpoint,
 )
+from src.models.factory import build_model
 from src.models.transformer import Transformer
 from src.post_training.chat_template import encode_prompt, get_tokenizer
 from src.post_training.evaluation import batched_generate
@@ -32,12 +33,9 @@ def load_model_from_ckpt(ckpt_path: str, device: str, overrides: dict | None = N
     too, so a model trained with ``--compile true`` loads correctly (issue #36).
     """
     ck = load_checkpoint(ckpt_path, map_location="cpu")
-    cfg = {**model_config_from_checkpoint(ck), **(overrides or {})}
-    model = Transformer(
-        n_head=cfg.get("n_head", 16), n_embed=cfg.get("n_embed", 1024),
-        context_length=cfg.get("context_length", 1024), vocab_size=cfg.get("vocab_size", 50304),
-        N_BLOCKS=cfg.get("n_blocks", 24),
-    )
+    defaults = {"n_head": 16, "n_embed": 1024, "context_length": 1024, "vocab_size": 50304, "n_blocks": 24}
+    cfg = {**defaults, **model_config_from_checkpoint(ck), **(overrides or {})}
+    model = build_model(cfg)
     state = model_state_from_checkpoint(ck, extra_prefixes=("transformer.",))
     load_model_weights(model, state, source=ckpt_path)
     return model.to(device).eval()
