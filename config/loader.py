@@ -57,7 +57,7 @@ def _resolve_base(json_path: str | None, base_path: str | None) -> str:
     if base_path is not None:
         return base_path
     if json_path:
-        sibling = os.path.join(os.path.dirname(json_path), "base.json")
+        sibling = os.path.join(os.path.dirname(json_path), "base.json").replace(os.sep, "/")  # same slashes as json_path
         if os.path.exists(sibling):
             return sibling
     return "configs/base.json"
