@@ -115,17 +115,19 @@ class Transformer(nn.Module):
         """
         Forward pass focusing on the embedding and attention blocks.
 
+        Runs every block normally except the last one, which returns its MLP hidden
+        activations (size ``4 * n_embed``) together with its residual stream.
+
         Args:
             idx (torch.Tensor): Input token indices.
 
         Returns:
-            tuple: Output after attention blocks and the residual.
+            tuple: The last block's MLP hidden activations and its residual stream.
         """
         x = self._pre_attn_pass(idx)
-        residual = x
-        for block in self.attn_blocks:
-            x, residual = block.forward_embedding(x)
-        return x, residual
+        for block in self.attn_blocks[:-1]:
+            x = block(x)
+        return self.attn_blocks[-1].forward_embedding(x)
 
     def generate(self, idx: torch.Tensor, max_new_tokens: int) -> torch.Tensor:
         """
