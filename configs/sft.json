@@ -13,5 +13,8 @@
   "min_lr": 1e-06,
   "weight_decay": 0.0,
   "grad_clip": 1.0,
-  "save_every": 500
+  "save_every": 500,
+  "lora_rank": 0,
+  "lora_alpha": 16.0,
+  "lora_dropout": 0.0
 }

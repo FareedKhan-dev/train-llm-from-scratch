@@ -135,6 +135,15 @@ class SFTConfig(BaseModelConfig):
     weight_decay: float = 0.0
     grad_clip: float = 1.0
     save_every: int = 500
+    # LoRA (0 = full fine-tuning). The adapters are merged into the weights before saving,
+    # so the checkpoint is a normal model every later stage can load.
+    lora_rank: int = 0
+    lora_alpha: float = 16.0
+    lora_dropout: float = 0.0
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        _check(self.lora_rank >= 0, "lora_rank must be >= 0")
 
 
 @dataclass

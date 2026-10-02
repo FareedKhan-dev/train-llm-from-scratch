@@ -18,6 +18,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # run from the repo without installing
 
 import contextlib
+import copy
 import math
 import os
 import time
@@ -28,6 +29,7 @@ from config.post_training_config import SFTConfig
 from data_loader.sft_dataset import get_sft_batch_iterator
 from src.post_training.cli import parse_config_with_json
 from src.post_training.distributed import ddp_setup, ddp_wrap, cleanup, reduce_scalar
+from src.models.lora import apply_lora, lora_parameter_count, merge_lora
 from src.post_training.logging_utils import MetricsLogger
 from src.post_training.optim import configure_optimizer, cosine_lr, set_lr
 from src.post_training.sft import sft_loss
@@ -53,12 +55,25 @@ def eval_dev(model, cfg, ctx, dev_path: str, max_batches: int = 50) -> float:
     return total / max(1, n)
 
 
+def model_to_save(model, use_lora: bool):
+    """With LoRA, save a merged copy so the checkpoint is a plain model for the next stages."""
+    plain = unwrap(model)
+    return merge_lora(copy.deepcopy(plain)) if use_lora else plain
+
+
 def main():
     cfg, _ = parse_config_with_json(SFTConfig, "configs/sft.json")
     ctx = ddp_setup(cfg.device)
     set_seed(cfg.seed + ctx.rank)
 
     model = load_backbone_from_ckpt(cfg, cfg.pretrained_ckpt, ctx.device)
+    use_lora = cfg.lora_rank > 0
+    if use_lora:
+        wrapped = apply_lora(model, cfg.lora_rank, cfg.lora_alpha, cfg.lora_dropout)
+        trainable, total = lora_parameter_count(model)
+        if ctx.is_main:
+            print(f"LoRA rank {cfg.lora_rank} on {len(wrapped)} layers: training {trainable:,} of "
+                  f"{total:,} parameters ({100 * trainable / total:.2f}%)")
     if cfg.compile:
         model = torch.compile(model)
     model = ddp_wrap(model, ctx)
@@ -121,16 +136,16 @@ def main():
                     logger.log(step, {"dev_loss": dev})
 
         if ctx.is_main and step > 0 and step % cfg.save_every == 0:
-            save_stage_ckpt(cfg.out_ckpt, model, optimizer, stage="sft", cfg=cfg, step=step,
-                            metrics={"train_loss": loss.item()})
+            save_stage_ckpt(cfg.out_ckpt, model_to_save(model, use_lora), None if use_lora else optimizer,
+                            stage="sft", cfg=cfg, step=step, metrics={"train_loss": loss.item()})
 
     if ctx.is_main:
         # Use the unwrapped model for the final eval: the other ranks have already reached
         # cleanup(), so calling the DDP-wrapped model here would launch a collective with no
         # peer and hang (NCCL timeout). The periodic eval above runs on all ranks, so it is fine.
         dev = eval_dev(unwrap(model), cfg, ctx, cfg.dev_path)
-        save_stage_ckpt(cfg.out_ckpt, model, optimizer, stage="sft", cfg=cfg, step=total_steps,
-                        metrics={"dev_loss": dev})
+        save_stage_ckpt(cfg.out_ckpt, model_to_save(model, use_lora), None if use_lora else optimizer,
+                        stage="sft", cfg=cfg, step=total_steps, metrics={"dev_loss": dev})
         print(f"Done SFT. dev_loss {dev:.4f} -> {cfg.out_ckpt}")
         if logger:
             logger.close()
