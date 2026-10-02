@@ -7,10 +7,19 @@ through the whole journey I built on top of the base model, every stage written 
 in plain PyTorch (no `trl`, no `peft`, no `transformers`), trained on real public datasets, and
 runnable on a single GPU or scaled across multiple GPUs with DDP.
 
-If you are new to LLM training internals, start with the new
+If you are new to LLM training internals, start with the
 **[LLM Foundations](foundations/README.md)** section before reading the stage pages. It explains the
 token shapes, decoder-only Transformer, attention masks, objectives, optimization loop, and generation
 mechanics that every later page relies on.
+
+Two newer sections sit next to the pipeline:
+
+- **[Laptop Track](student/README.md)**: no GPU needed. Prepare TinyStories, train your own BPE
+  tokenizer and a small model on a CPU in minutes, and generate stories with it.
+- **[Modern LLM](modern/README.md)**: what changed between the 2017 Transformer and today's open
+  models (RoPE, RMSNorm, SwiGLU, grouped-query and latent attention, Mixture of Experts, the KV
+  cache), plus Muon, LoRA, the newer preference losses, the GRPO follow-ups and fast inference.
+  Every stage of the pipeline can train either model.
 
 ## Recommended reading order
 
@@ -32,6 +41,9 @@ mechanics that every later page relies on.
 3. **Finally run and inspect**:
    [Evaluation](08_evaluation.md), [Inference / Chat](09_inference.md), and the
    [command cheatsheet](howto/commands.md).
+4. **Then go modern**: [the modern model](modern/README.md), [optimizers](modern/optimizers.md),
+   [preference losses](modern/preference.md), [RL for reasoning](modern/rl_reasoning.md),
+   [LoRA](modern/lora.md) and [fast inference](modern/inference.md).
 
 The pipeline mirrors how modern aligned/reasoning models are actually built:
 
