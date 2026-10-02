@@ -5,13 +5,13 @@
 <!-- omit in toc -->
 # Train LLM From Scratch
 
-![Python](https://img.shields.io/badge/Python-3.9%2B-blue) ![License](https://img.shields.io/badge/License-MIT-green) ![Contributions](https://img.shields.io/badge/Contributions-Welcome-blue) [![Docs](https://img.shields.io/badge/Docs-Available-success)](https://fareedkhan-dev.github.io/train-llm-from-scratch/)
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue) [![CI](https://github.com/FareedKhan-dev/train-llm-from-scratch/actions/workflows/ci.yml/badge.svg)](https://github.com/FareedKhan-dev/train-llm-from-scratch/actions/workflows/ci.yml) ![License](https://img.shields.io/badge/License-MIT-green) ![Contributions](https://img.shields.io/badge/Contributions-Welcome-blue) [![Docs](https://img.shields.io/badge/Docs-Available-success)](https://fareedkhan-dev.github.io/train-llm-from-scratch/)
 
 **I am Looking for a PhD position in AI**. [GitHub](https://github.com/FareedKhan-dev)
 
 </div>
 
-I implemented a transformer model from scratch using PyTorch, based on the paper [Attention is All You Need](https://arxiv.org/abs/1706.03762). You can use my scripts to train your own **billion** or **million** parameter LLM using a single GPU.
+I implemented a transformer model from scratch using PyTorch, based on the paper [Attention is All You Need](https://arxiv.org/abs/1706.03762). You can use my scripts to train your own **billion** or **million** parameter LLM using a single GPU, or a small one on a laptop CPU with no GPU at all.
 
 This started as a pretraining tutorial. It now goes all the way from raw text to an aligned, reasoning style model, with every algorithm hand written in plain PyTorch (no `trl`, no `peft`, no `transformers`). The whole journey is one idea repeated: turn text into numbers, predict the next token, then keep changing the data and the loss until the model does what we want.
 
@@ -40,6 +40,7 @@ Odambinais is uncertain and fortune established in rural areas.
 - [Who this is for](#who-this-is-for)
 - [Prerequisites and Training Time](#prerequisites-and-training-time)
 - [Setup](#setup)
+- [No GPU? Train on Your Laptop](#no-gpu-train-on-your-laptop)
 - [Code Structure](#code-structure)
 - [Step 1: Preparing the Data](#step-1-preparing-the-data)
 - [Step 2: The Model, Built From Small Pieces](#step-2-the-model-built-from-small-pieces)
@@ -92,7 +93,7 @@ You need a basic understanding of object oriented programming, neural networks, 
 | Neural Network      | [Neural Network Video](https://www.youtube.com/watch?v=Jy4wM2X21u0) |
 | Pytorch             | [Pytorch Video](https://www.youtube.com/watch?v=V_xro1bcAuA) |
 
-You will need a GPU to train. A free Colab or Kaggle T4 is enough for the 13 million parameter model, but it will not fit a billion parameter model. Here is a rough guide:
+You do not need a GPU to start: the [laptop track](#no-gpu-train-on-your-laptop) trains a small model on a CPU in minutes. For the bigger models you will need a GPU. A free Colab or Kaggle T4 is enough for the 13 million parameter model, but it will not fit a billion parameter model. Here is a rough guide:
 
 | GPU Name                 | Memory | 2B LLM Training | 13M LLM Training | Max Practical LLM Size (Training) |
 |--------------------------|--------|-----------------|------------------|-----------------------------------|
@@ -117,6 +118,8 @@ cd train-llm-from-scratch
 pip install -e .
 ```
 
+If you use [uv](https://docs.astral.sh/uv/), `uv sync` does the same and also installs the test tools. On a Linux machine without an NVIDIA GPU, install the small CPU build of PyTorch first (`pip install torch --index-url https://download.pytorch.org/whl/cpu`), because the default Linux wheel bundles CUDA.
+
 There are optional extras for the parts you want:
 
 ```bash
@@ -133,6 +136,29 @@ There are two config systems, and it helps to know which is which from the start
 
 For fast checks there is a tiny `configs/smoke/` variant of every stage that shrinks the model so a full run finishes in seconds on a CPU or a single GPU.
 
+## No GPU? Train on Your Laptop
+
+You can train a real (small) language model on a laptop CPU, from raw text to generated stories, in about ten minutes. Three commands:
+
+```bash
+python scripts/prepare_tiny_data.py                              # TinyStories + a BPE tokenizer trained from scratch
+python scripts/train_transformer.py --preset tiny --arch modern  # 369K parameters, about 5 minutes on a CPU
+python scripts/generate_text.py --model_path models/tiny.pt      # write a story
+```
+
+The first command downloads 25 MB of [TinyStories](https://arxiv.org/abs/2305.07759) (short stories written for training tiny models) and trains a 4,096 token BPE tokenizer on it, written from scratch in `src/tokenizer/bpe.py`. A small vocabulary keeps the embedding table small, which is what makes a tiny model fast. Here is what the tiny model wrote after five minutes of training on my laptop:
+
+```
+#### OUTPUT ####
+Once upon a time, there was a little girl named Lily. She liked to eat some food together.
+One day, Lily found a big box in a box. She wanted to pick it up and find it. She thought it
+would make it happy. She looked at her bear and said, "Yes, I will find me. I want to help you get it."
+```
+
+Real words, real sentences, a character and a plot of sorts, from 369 thousand parameters. Bigger presets (`student`, `small`) take longer and write better stories. `scripts/benchmark.py` measures how fast each preset trains on your machine before you commit to a long run, and `scripts/model_report.py` tells you how big a model is, how much compute it needs, and whether it fits in memory.
+
+The full guide, with the presets, the expected losses and experiments to try, is in [docs/student](docs/student/README.md).
+
 ## Code Structure
 
 ```bash
@@ -142,15 +168,25 @@ train-llm-from-scratch/
 │   │   ├── mlp.py               # the feed-forward block
 │   │   ├── attention.py         # single head and multi head attention
 │   │   ├── transformer_block.py # one block: attention + MLP + residuals
-│   │   └── transformer.py       # the full model: embeddings + blocks + lm_head
-│   └── post_training/           # SFT, reward model, PPO, DPO, GRPO, eval, inference
+│   │   ├── transformer.py       # the full model: embeddings + blocks + lm_head
+│   │   ├── modern/              # the modern decoder: RoPE, RMSNorm, SwiGLU, GQA/MLA, MoE, KV cache
+│   │   ├── factory.py           # build_model(cfg): classic or modern from one config
+│   │   └── lora.py              # LoRA adapters, from scratch
+│   ├── optim/                   # Muon, and cosine / WSD / linear learning-rate schedules
+│   ├── tokenizer/               # a byte-level BPE tokenizer, from scratch
+│   ├── inference/               # sampling (top-k, top-p, min-p), speculative decoding, int8
+│   ├── post_training/           # SFT, reward model, PPO, DPO, GRPO, eval, inference
+│   ├── checkpoint.py            # saving and loading checkpoints from any wrapper
+│   └── device.py                # picks CUDA, Apple MPS, CPU (or an experimental TPU)
 ├── config/
 │   ├── config.py                # legacy pretraining config (plain constants)
-│   ├── post_training_config.py  # dataclasses for every post-training stage
-│   └── loader.py                # merges defaults < base.json < stage.json < CLI
+│   ├── presets.py               # named model sizes: tiny, student, small, 13m, 77m, 3b
+│   ├── post_training_config.py  # typed dataclasses for every post-training stage
+│   └── loader.py                # merges defaults < base.json < stage.json < CLI, checks types
 ├── configs/                     # editable JSON, one file per stage (+ smoke/)
 ├── data_loader/                 # batch iterators for each kind of data
 ├── scripts/                     # every runnable step lives here
+├── tests/                       # pytest: models, losses, configs, and every script end to end
 ├── ui/                          # the Streamlit control panel
 ├── docs/                        # the MkDocs site (theory + diagrams)
 ├── images/                      # the diagrams in this README (+ the generator)
@@ -172,7 +208,7 @@ The four streams are:
 
 ### Tokenization
 
-We use the `r50k_base` tokenizer from OpenAI's `tiktoken`, the same one GPT-3 used. Text becomes a list of integers, and we append a special `<|endoftext|>` token (id 50256) at the end of every document so the model learns where one piece of text stops and the next begins.
+We use the `r50k_base` tokenizer from OpenAI's `tiktoken`, the same one GPT-3 used. Text becomes a list of integers, and we append a special `<|endoftext|>` token (id 50256) at the end of every document so the model learns where one piece of text stops and the next begins. (The laptop track trains its own, much smaller tokenizer instead; [BPE from scratch](docs/foundations/bpe.md) shows how.)
 
 ![Tokenization](images/02_tokenization.png)
 
