@@ -1,0 +1,15 @@
+%%{init: {'look':'handDrawn','theme':'base','themeVariables':{'fontFamily':'Comic Sans MS, cursive'}}}%%
+flowchart LR
+    T([raw text]):::data --> S[regex split<br/>words, numbers, spaces]:::proc
+    S --> B[(each chunk as UTF-8 bytes<br/>ids 0 to 255)]:::store
+    B --> C[count every adjacent<br/>pair of ids]:::proc
+    C --> M{{merge the most frequent pair<br/>into a new id}}:::model
+    M -->|update only the chunks<br/>that had the pair| C
+    M -->|after vocab_size - 256 merges| V[(merges list<br/>= the tokenizer)]:::ckpt
+    V --> E([encode: replay merges in order<br/>decode: join the bytes]):::eval
+    classDef data fill:#d6ffd9,stroke:#27ae60,stroke-width:2px,color:#143d1a;
+    classDef proc fill:#d6e8ff,stroke:#2c6fbb,stroke-width:2px,color:#0d2c52;
+    classDef store fill:#cdece8,stroke:#16a085,stroke-width:2px,color:#0a3d33;
+    classDef model fill:#ffe8a3,stroke:#d48806,stroke-width:2px,color:#5a3d00;
+    classDef ckpt fill:#eeeeee,stroke:#555,stroke-width:2px,color:#222;
+    classDef eval fill:#e8d6ff,stroke:#8e44ad,stroke-width:2px,color:#3d1a5a;

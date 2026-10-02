@@ -1,0 +1,15 @@
+%%{init: {'look':'handDrawn','theme':'base','themeVariables':{'fontFamily':'Comic Sans MS, cursive'}}}%%
+flowchart LR
+    J1[(configs/base.json)]:::store --> L{{typed loader<br/>config/loader.py}}:::model
+    J2[(configs/dpo.json)]:::store --> L
+    CLI([--beta 0.2]):::data --> L
+    L -->|unknown key| E1[error + did you mean]:::loss
+    L -->|wrong type or choice| E2[error naming the file]:::loss
+    L -->|ok| DC[dataclass<br/>__post_init__ checks]:::proc
+    DC -->|n_embed % n_head != 0| E3[error at startup]:::loss
+    DC -->|ok| M{{model and trainer<br/>tensor shapes checked in tests}}:::model
+    classDef data fill:#d6ffd9,stroke:#27ae60,stroke-width:2px,color:#143d1a;
+    classDef proc fill:#d6e8ff,stroke:#2c6fbb,stroke-width:2px,color:#0d2c52;
+    classDef store fill:#cdece8,stroke:#16a085,stroke-width:2px,color:#0a3d33;
+    classDef model fill:#ffe8a3,stroke:#d48806,stroke-width:2px,color:#5a3d00;
+    classDef loss fill:#ffd6d6,stroke:#c0392b,stroke-width:2px,color:#5c1212;
