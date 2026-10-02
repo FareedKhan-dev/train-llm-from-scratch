@@ -1,10 +1,10 @@
 <!-- omit in toc -->
-# Stage 6 — GRPO / RLVR (the reasoning frontier)
+# Stage 6: GRPO / RLVR (the reasoning frontier)
 
 GRPO (Group Relative Policy Optimization) is the algorithm behind DeepSeek-R1, and it's beautifully
 simple: **throw away PPO's value network**. For each prompt, sample a whole *group* of answers, score
 them with a verifiable reward, and use the group's own mean/std as the baseline. The advantage is just
-"how much better than your groupmates was this answer?" — no critic to train, no value loss.
+"how much better than your groupmates was this answer?" No critic to train, no value loss.
 
 For the group-relative advantage formula and how it relates to PPO-style policy ratios, see
 [Objectives, Losses & Perplexity](foundations/objectives.md).
@@ -36,7 +36,7 @@ flowchart LR
 
 ## Group-relative advantage
 
-[`group_advantages`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/grpo.py#L17) is the whole idea — standardize rewards *within
+[`group_advantages`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/grpo.py#L17) is the whole idea: standardize rewards *within
 each group*, so a good answer is one that beats its siblings on the same prompt:
 
 ```python
@@ -47,7 +47,7 @@ def group_advantages(rewards, group_size, eps=1e-4):
 ```
 
 A nice property: if every answer in a group gets the same reward (all right or all wrong), the std-based
-advantage is ~0 and that group simply contributes no gradient — so I log the fraction of *informative*
+advantage is ~0 and that group simply contributes no gradient, so I log the fraction of *informative*
 groups as a health metric.
 
 ## The loss: clipped surrogate + KL
@@ -87,11 +87,11 @@ PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_grpo.py
 
 ## What the numbers mean
 
-- **reward** — mean verifier reward across the group samples; the curve you want climbing.
-- **informative** — fraction of groups with non-zero reward spread (groups that actually teach
+- **reward**: mean verifier reward across the group samples; the curve you want climbing.
+- **informative**: fraction of groups with non-zero reward spread (groups that actually teach
   something). If this collapses to 0, raise temperature / group size or stay longer on the curriculum.
-- **KL** — KL to the reference; keep it bounded.
-- **GSM8K test accuracy** — the headline reasoning metric, evaluated every `--eval_every`.
+- **KL**: KL to the reference; keep it bounded.
+- **GSM8K test accuracy**: the headline reasoning metric, evaluated every `--eval_every`.
 
 > I verified the GRPO path genuinely optimizes: with a learnable reward the mean reward climbed
 > **0.10 → 0.69 → 1.00** in ~15 iterations and saturated. PPO and GRPO share the same rollout/log-prob

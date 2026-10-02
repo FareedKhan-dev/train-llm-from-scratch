@@ -1,9 +1,9 @@
 <!-- omit in toc -->
-# Stage 3 — Reward Model
+# Stage 3: Reward Model
 
 To do classic RLHF (PPO) we need something that scores a response with a single number: higher = more
 preferred. That's the reward model. I build it by putting a tiny scalar head on top of the SFT
-backbone and training it on human preference pairs with the **Bradley-Terry** loss — the same recipe
+backbone and training it on human preference pairs with the **Bradley-Terry** loss, the same recipe
 as InstructGPT.
 
 This page assumes you already know how the backbone produces hidden states. If not, start with
@@ -39,7 +39,7 @@ flowchart LR
 [`RewardModel`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/reward_model.py#L37) wraps a `Transformer`, drops the `lm_head`,
 and reads the reward off the **last real token's** hidden state (the InstructGPT convention). Because
 attention is causal, that last token has seen the whole sequence and never attends to the right-padding
-after it — so we need no attention mask:
+after it, so we need no attention mask:
 
 ```python
 class RewardModel(nn.Module):
@@ -64,8 +64,8 @@ def bradley_terry_loss(chosen_rewards, rejected_rewards):
     return -F.logsigmoid(chosen_rewards - rejected_rewards).mean()
 ```
 
-[`preference_accuracy`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/reward_train.py#L23) — the fraction of pairs where
-`r_chosen > r_rejected` — is the metric I actually watch.
+[`preference_accuracy`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/reward_train.py#L23), the fraction of pairs where
+`r_chosen > r_rejected`, is the metric I actually watch.
 
 ## The trainer
 
@@ -94,12 +94,12 @@ PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_reward.py
 
 ## What the numbers mean
 
-- **loss** — Bradley-Terry; starts at `-log σ(0) = 0.693` (chance) and drops as the gap widens.
-- **train_acc / test_acc** — preference accuracy. On clean fixtures it goes to `1.0`; on **real, noisy**
-  HH-RLHF / UltraFeedback expect roughly **0.65–0.75** — that's normal, human preferences are noisy.
-- **margin** — mean `r_chosen − r_rejected`; a useful "is it still separating them" signal.
+- **loss**: Bradley-Terry; starts at `-log σ(0) = 0.693` (chance) and drops as the gap widens.
+- **train_acc / test_acc**: preference accuracy. On clean fixtures it goes to `1.0`; on **real, noisy**
+  HH-RLHF / UltraFeedback expect roughly **0.65 to 0.75**. That's normal: human preferences are noisy.
+- **margin**: mean `r_chosen − r_rejected`; a useful "is it still separating them" signal.
 
 Saved to `/ephemeral/ckpts/reward.pt`; PPO loads it with
 [`load_reward_model`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/reward_model.py) when `--reward_source rm`.
 
-➡️ Next: [Stage 5 — PPO](06_ppo.md) (which consumes this), or the RM-free path: [DPO](05_dpo.md).
+➡️ Next: [Stage 5: PPO](06_ppo.md) (which consumes this), or the RM-free path: [DPO](05_dpo.md).

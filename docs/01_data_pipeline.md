@@ -2,7 +2,7 @@
 # Data Handling & Preprocessing
 
 Every stage needs data in a different shape, and getting these shapes right is honestly half the
-battle — a misaligned loss mask or a mis-parsed gold answer will silently wreck training. So before
+battle: a misaligned loss mask or a mis-parsed gold answer will silently wreck training. So before
 any model code, here is exactly how I download and preprocess each dataset, and the format each
 trainer expects.
 
@@ -105,7 +105,7 @@ PYTHONPATH=. python scripts/prepare_sft_data.py --context_length 1024 --out_dir 
 ```
 
 I verified on the real file that the mask covers exactly `<answer>4</answer>` and excludes the user
-question — that alignment is what makes SFT work.
+question. That alignment is what makes SFT work.
 
 ## 3 · Preference data (→ `{prompt, chosen, rejected}` JSONL)
 
@@ -122,7 +122,7 @@ def _split_hh(text):
 
 Output is `preferences.jsonl` (train) + `preferences_test.jsonl` (held-out, for measuring reward-model
 accuracy). [`preference_dataset.py`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/data_loader/preference_dataset.py) tokenizes each side through
-the same chat template and right-pads a batch — which is safe because the model's attention is
+the same chat template and right-pads a batch, which is safe because the model's attention is
 **causal**, so the last real token never attends to padding after it (no attention mask needed).
 
 ```bash
@@ -133,7 +133,7 @@ PYTHONPATH=. python scripts/prepare_preference_data.py --source both --max_per_s
 
 [`prepare_rl_prompts.py`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/scripts/prepare_rl_prompts.py) turns GSM8K into prompts with a **verifiable
 numeric gold answer** (parsed from the dataset's `#### N`), plus a programmatic **arithmetic curriculum**
-that even a weak policy can partly solve — so RL has non-zero reward signal to bootstrap from:
+that even a weak policy can partly solve, so RL has non-zero reward signal to bootstrap from:
 
 ```python
 gold = gsm8k_gold_answer(ex["answer"])           # the number after '####'
@@ -144,7 +144,7 @@ rows.append({"prompt": ex["question"].strip(), "gold": gold})
 PYTHONPATH=. python scripts/prepare_rl_prompts.py --out_dir /ephemeral/data
 ```
 
-I cross-checked the emitted gold answers 50/50 against the live GSM8K dataset — they match exactly,
+I cross-checked the emitted gold answers 50/50 against the live GSM8K dataset. They match exactly,
 which matters because the verifier reward ([08_evaluation.md](08_evaluation.md)) is only as trustworthy
 as the gold it compares against.
 
@@ -159,4 +159,4 @@ as the gold it compares against.
 | `arithmetic_prompts.jsonl` | `{prompt, gold}` | GRPO curriculum warm-up |
 <br>
 
-➡️ Next: [Stage 1 — Pretraining](02_pretraining.md).
+➡️ Next: [Stage 1: Pretraining](02_pretraining.md).

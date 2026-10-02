@@ -1,9 +1,9 @@
 <!-- omit in toc -->
-# Post-Training & Alignment — Overview
+# Post-Training & Alignment: Overview
 
 When I first trained this transformer from scratch, it could *continue* text but it couldn't
 *follow instructions* or *reason*. That's what post-training fixes. This `docs/` folder walks
-through the whole journey I built on top of the base model — every stage written from scratch
+through the whole journey I built on top of the base model, every stage written from scratch
 in plain PyTorch (no `trl`, no `peft`, no `transformers`), trained on real public datasets, and
 runnable on a single GPU or scaled across multiple GPUs with DDP.
 
@@ -74,14 +74,14 @@ flowchart TD
 | 4 | **DPO / ORPO / KTO** | to prefer better answers *without* an RL loop | [05_dpo.md](05_dpo.md) |
 | 5 | **PPO** | to maximize a reward (RM or verifier) with the classic RLHF loop | [06_ppo.md](06_ppo.md) |
 | 6 | **GRPO / RLVR** | to reason, using verifiable rewards (DeepSeek-R1 style) | [07_grpo.md](07_grpo.md) |
-| — | **Data pipeline** | how every dataset above is downloaded & preprocessed | [01_data_pipeline.md](01_data_pipeline.md) |
-| — | **Evaluation** | how I measure GSM8K accuracy across all stages | [08_evaluation.md](08_evaluation.md) |
-| — | **Inference / chat** | how to actually talk to any checkpoint | [09_inference.md](09_inference.md) |
+| | **Data pipeline** | how every dataset above is downloaded & preprocessed | [01_data_pipeline.md](01_data_pipeline.md) |
+| | **Evaluation** | how I measure GSM8K accuracy across all stages | [08_evaluation.md](08_evaluation.md) |
+| | **Inference / chat** | how to actually talk to any checkpoint | [09_inference.md](09_inference.md) |
 
 ## The one design rule: *wrap, don't rewrite*
 
 Everything here sits on top of the original [`Transformer`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/models/transformer.py). I changed the
-educational model in exactly **one** place — I added a [`forward_hidden`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/models/transformer.py#L56)
+educational model in exactly **one** place: I added a [`forward_hidden`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/models/transformer.py#L56)
 method that returns the final hidden states the `lm_head` consumes. Every post-training head (a value
 head for PPO, a scalar reward head for the reward model) and every RL log-prob computation composes
 *around* that one method, so the from-scratch model you already understand stays intact.
@@ -92,8 +92,8 @@ head for PPO, a scalar reward head for the reward model) and every RL log-prob c
 ·  🟧 RL / reward  ·  🟥 loss / objective  ·  🟪 evaluation  ·  ⬜ checkpoint
 
 > Each diagram is a hand-drawn, colour-coded Mermaid sketch, **pre-rendered to a PNG and embedded as
-> an image** (GitHub's live Mermaid doesn't reliably do `look: handDrawn`, and some viewers — e.g. the
-> VS Code preview — block SVGs, so an embedded PNG shows everywhere). The editable Mermaid source sits
+> an image** (GitHub's live Mermaid doesn't reliably do `look: handDrawn`, and some viewers, e.g. the
+> VS Code preview, block SVGs, so an embedded PNG shows everywhere). The editable Mermaid source sits
 > in a collapsible *"Mermaid source"* block under each image. To regenerate the images after editing,
 > see [diagrams/README.md](diagrams/README.md).
 

@@ -1,5 +1,5 @@
 <!-- omit in toc -->
-# Stage 2 — Supervised Fine-Tuning (SFT)
+# Stage 2: Supervised Fine-Tuning (SFT)
 
 The base model can continue text but it doesn't know it's supposed to *answer* you. SFT fixes that by
 showing it thousands of `(instruction, response)` pairs and training it to produce the **response**.
@@ -56,8 +56,8 @@ logits keeps the cross-entropy numerically clean under bf16.
 ## The trainer
 
 [`train_sft.py`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/scripts/train_sft.py) loads the pretrained base with
-[`load_backbone_from_ckpt`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/utils.py), then runs a compact loop — autocast forward,
-masked loss, clip, step, cosine LR — with periodic dev evaluation:
+[`load_backbone_from_ckpt`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/utils.py), then runs a compact loop (autocast forward,
+masked loss, clip, step, cosine LR) with periodic dev evaluation:
 
 ```python
 tokens, mask, epoch = next(train_it)
@@ -82,14 +82,14 @@ PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_sft.py # bot
 
 ## What the numbers mean
 
-- **train_loss / ppl** — masked cross-entropy (and its perplexity) over assistant tokens; should drop
+- **train_loss / ppl**: masked cross-entropy (and its perplexity) over assistant tokens; should drop
   well below the base model's loss. To sanity-check the mechanics I ran an *overfit* test on 8 rows and
   watched the loss collapse `11.0 → 4.7`, confirming the gradient path learns.
-- **dev_loss** — the same masked loss on a held-out split (`sft_dev_packed.h5`); the honest signal.
-- **GSM8K dev accuracy** — after SFT the model both follows instructions *and* emits the
+- **dev_loss**: the same masked loss on a held-out split (`sft_dev_packed.h5`); the honest signal.
+- **GSM8K dev accuracy**: after SFT the model both follows instructions *and* emits the
   `<answer>…</answer>` format, so this should rise above the base model (see [08_evaluation.md](08_evaluation.md)).
 
 The result is saved to `/ephemeral/ckpts/sft.pt` and becomes the starting point for the reward model,
 DPO, PPO and GRPO.
 
-➡️ Next: [Stage 3 — Reward Model](04_reward_model.md) or jump to [DPO](05_dpo.md).
+➡️ Next: [Stage 3: Reward Model](04_reward_model.md) or jump to [DPO](05_dpo.md).

@@ -1,9 +1,9 @@
 <!-- omit in toc -->
-# Stage 4 — DPO (and ORPO / KTO)
+# Stage 4: DPO (and ORPO / KTO)
 
 Direct Preference Optimization is the shortcut around RLHF: instead of training a reward model and then
 running an RL loop, DPO optimizes the policy *directly* on preference pairs, using a frozen copy of the
-SFT model as a reference anchor. No reward model, no rollouts, no value function — just one clean loss.
+SFT model as a reference anchor. No reward model, no rollouts, no value function: just one clean loss.
 I also implemented two popular variants behind a `--loss_type` flag: **ORPO** (reference-free) and
 **KTO** (works from a desirable/undesirable signal).
 
@@ -64,9 +64,9 @@ def dpo_loss(policy_chosen_logps, policy_rejected_logps, ref_chosen_logps, ref_r
 
 The two **variants** ([`orpo_loss`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/dpo.py#L48),
 [`kto_loss`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/dpo.py#L71)) live in the same file:
-- **ORPO** — reference-free: combines the SFT negative-log-likelihood on the chosen response with an
+- **ORPO**: reference-free: combines the SFT negative-log-likelihood on the chosen response with an
   odds-ratio preference term, folding SFT + alignment into one stage (no frozen reference needed).
-- **KTO** — treats chosen as *desirable* and rejected as *undesirable* against a reference-KL baseline
+- **KTO**: treats chosen as *desirable* and rejected as *undesirable* against a reference-KL baseline
   estimated from the batch; useful when you only have thumbs-up/down rather than pairs.
 
 ## The trainer
@@ -91,17 +91,17 @@ PYTHONPATH=. python scripts/train_dpo.py --loss_type orpo --orpo_lambda 1.0
 PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_dpo.py
 ```
 
-> DPO uses a **small** learning rate (`5e-7` by default) — it's easy to over-push away from the
+> DPO uses a **small** learning rate (`5e-7` by default). It's easy to over-push away from the
 > reference and degrade the model, so go gentle.
 
 ## What the numbers mean
 
-- **loss** — DPO/KTO start near `0.693`; ORPO starts higher (it includes the NLL term).
-- **acc** — implicit-reward accuracy: fraction of pairs where the policy's implicit reward prefers the
+- **loss**: DPO/KTO start near `0.693`; ORPO starts higher (it includes the NLL term).
+- **acc**: implicit-reward accuracy: fraction of pairs where the policy's implicit reward prefers the
   chosen response. Should climb above 0.5.
-- **r_chosen / r_rejected** — the implicit rewards `β·(logπ − logref)`; the gap (margin) should widen.
-- **GSM8K dev accuracy** — the real downstream check.
+- **r_chosen / r_rejected**: the implicit rewards `β·(logπ − logref)`; the gap (margin) should widen.
+- **GSM8K dev accuracy**: the real downstream check.
 
 Saved to `/ephemeral/ckpts/dpo.pt`.
 
-➡️ Next: the RL path — [PPO](06_ppo.md) and [GRPO](07_grpo.md).
+➡️ Next: the RL path, [PPO](06_ppo.md) and [GRPO](07_grpo.md).

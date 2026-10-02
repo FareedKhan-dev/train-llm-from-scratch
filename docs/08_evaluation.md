@@ -3,8 +3,8 @@
 
 A pipeline is only believable if you can measure it, so I evaluate every stage on the **same** held-out
 GSM8K test set with greedy decoding. The headline deliverable is a single table: GSM8K accuracy as it
-moves Base → SFT → DPO → PPO → GRPO. The reward is *verifiable* — I parse the model's final number and
-compare it to the gold answer — so the score is objective, not a judgment call.
+moves Base → SFT → DPO → PPO → GRPO. The reward is *verifiable* (I parse the model's final number and
+compare it to the gold answer), so the score is objective, not a judgment call.
 
 ![Evaluation flow](diagrams/08_evaluation.png)
 
@@ -44,9 +44,9 @@ responses = batched_generate(model, prompts, max_new_tokens, device=device, gree
 correct = sum(is_correct(resp, gsm8k_gold_answer(ans)) for (q, ans), resp in zip(qa_pairs, responses))
 ```
 
-The reward/checker lives in [`rewards/`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/rewards/). `extract_answer` is tolerant —
+The reward/checker lives in [`rewards/`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/rewards/). `extract_answer` is tolerant:
 it prefers an `<answer>…</answer>` tag, then a GSM8K-style `#### N`, then falls back to the last number
-in the text — and [`reward_gsm8k`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/rewards/verifiers.py#L35) is
+in the text. [`reward_gsm8k`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/rewards/verifiers.py#L35) is
 **correctness-dominant** with only a small, bounded format bonus, to discourage reward hacking:
 
 ```python
@@ -85,14 +85,14 @@ grpo                    ...      200
 ## In-training metrics
 
 Each trainer also writes a metrics JSONL under `/ephemeral/logs/` (via
-[`MetricsLogger`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/logging_utils.py)) — train/dev loss for SFT, preference accuracy
+[`MetricsLogger`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/logging_utils.py)): train/dev loss for SFT, preference accuracy
 for the reward model, implicit-reward accuracy for DPO, and reward/KL/clip-fraction + GSM8K accuracy for
 PPO/GRPO. Pass `--use_wandb true` to also mirror to Weights & Biases; the JSONL is always written so you
 can plot offline.
 
 ## What "good" looks like at this scale
 
-A ~400M from-scratch model won't top the GSM8K leaderboard — the point is the **relative** climb across
+A ~400M from-scratch model won't top the GSM8K leaderboard. The point is the **relative** climb across
 stages and bounded KL during RL. Expect modest absolute numbers but a clear, real before/after gain at
 each step.
 

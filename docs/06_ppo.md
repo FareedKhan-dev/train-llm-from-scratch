@@ -1,8 +1,8 @@
 <!-- omit in toc -->
-# Stage 5 — PPO (classic RLHF)
+# Stage 5: PPO (classic RLHF)
 
 This is the original ChatGPT recipe: let the model generate, score the generations with a reward, and
-nudge the policy toward higher-reward behaviour using Proximal Policy Optimization — with a value
+nudge the policy toward higher-reward behaviour using Proximal Policy Optimization, with a value
 network (critic) for variance reduction and a KL penalty to keep it from drifting too far from the SFT
 model. I wrote the whole loop from scratch: rollout → reward → GAE advantages → clipped update.
 
@@ -39,7 +39,7 @@ flowchart LR
 ## The actor-critic
 
 PPO needs a per-token value estimate `V(s_t)` next to the policy logits. I get both from one backbone
-with [`TransformerWithValueHead`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/value_head.py#L19) — it reuses
+with [`TransformerWithValueHead`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/value_head.py#L19). It reuses
 `forward_hidden` + `lm_head` for the policy and adds a small scalar value head (initialized to ~0 so the
 critic doesn't destabilize early training):
 
@@ -58,7 +58,7 @@ completion for each, and [`generate_with_logprobs`](https://github.com/FareedKha
 sampling log-probs. Log-probs are always taken in **fp32** ([`compute_logprobs`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/rollout.py#L233))
 because PPO subtracts them and bf16 rounding there is harmful.
 
-## GAE — Generalized Advantage Estimation
+## GAE: Generalized Advantage Estimation
 
 [`compute_gae`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/ppo.py#L24) works in the "action frame" (index `t` = producing
 token `t+1`), bootstrapping only while the next action is still a response token:
@@ -101,16 +101,16 @@ PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_ppo.py
 
 ## What the numbers mean
 
-- **reward** — mean task reward per iteration; the headline curve, should trend up.
-- **KL_ref** — mean KL of the policy from the SFT reference; must stay **bounded**. If it blows up the
-  model is degenerating — lower the LR or raise `--kl_coef`.
-- **clipfrac** — fraction of tokens hitting the PPO clip; a health/▒step-size signal.
-- **value_loss** — critic regression error.
-- **GSM8K test accuracy** — the real outcome, evaluated every `--eval_every`.
+- **reward**: mean task reward per iteration; the headline curve, should trend up.
+- **KL_ref**: mean KL of the policy from the SFT reference; must stay **bounded**. If it blows up the
+  model is degenerating: lower the LR or raise `--kl_coef`.
+- **clipfrac**: fraction of tokens hitting the PPO clip; a health and step-size signal.
+- **value_loss**: critic regression error.
+- **GSM8K test accuracy**: the real outcome, evaluated every `--eval_every`.
 
 > PPO is the touchy one: small LR (`1e-6`), `clip 0.2`, grad-clip 1.0, and watch KL. I verified the loop
-> truly *optimizes* by giving it a learnable synthetic reward — reward climbed `0.10 → 1.00`.
+> truly *optimizes* by giving it a learnable synthetic reward: reward climbed `0.10 → 1.00`.
 
 Saved to `/ephemeral/ckpts/ppo.pt`.
 
-➡️ Next: [Stage 6 — GRPO](07_grpo.md), which drops the critic entirely.
+➡️ Next: [Stage 6: GRPO](07_grpo.md), which drops the critic entirely.
