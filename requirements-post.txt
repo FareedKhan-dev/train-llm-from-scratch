@@ -2,7 +2,7 @@
 # Targets H100 + CUDA 12.x (the base requirements.txt pins cu118 for the original
 # pretraining path; this file does NOT overwrite it). Install into a fresh venv:
 #
-#   python3 -m venv /ephemeral/venv && source /ephemeral/venv/bin/activate
+#   python3 -m venv .venv && source .venv/bin/activate
 #   pip install -r requirements-post.txt
 #
 # torchrun (multi-GPU) ships with torch.
@@ -15,5 +15,7 @@ h5py
 tqdm
 tiktoken
 zstandard
+jaxtyping         # tensor shape annotations
+regex             # the BPE tokenizer's split pattern
 datasets          # HuggingFace dataset downloads (Alpaca, HH-RLHF, GSM8K, ...)
 wandb             # optional experiment logging (every script also writes JSONL)

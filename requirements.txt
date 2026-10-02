@@ -1,3 +1,5 @@
+# `pip install -e .` (pyproject.toml) is the recommended install; this file is kept for
+# `pip install -r requirements.txt`. The extra index serves CUDA 11.8 builds of torch.
 --extra-index-url https://download.pytorch.org/whl/cu118
 torch
 torchvision
@@ -8,3 +10,5 @@ requests
 tqdm
 zstandard
 tiktoken
+jaxtyping
+regex
