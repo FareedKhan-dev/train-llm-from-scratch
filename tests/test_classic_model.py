@@ -55,3 +55,6 @@ def test_generate_options() -> None:
         manual = torch.cat([manual, logits[:, -1].argmax(-1, keepdim=True)], dim=1)
     assert torch.equal(windowed, manual)
     assert not torch.is_grad_enabled() or out.requires_grad is False
+    # min-p close to 1 keeps only the top token, and a tiny top-p does the same: both are greedy
+    assert torch.equal(model.generate(prompt, 10, min_p=0.999), greedy_a)
+    assert torch.equal(model.generate(prompt, 10, top_p=1e-6), greedy_a)

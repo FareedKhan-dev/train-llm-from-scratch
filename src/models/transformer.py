@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint as checkpoint
+from src.inference.sampling import filter_logits
 from src.models.transformer_block import Block
 
 class Transformer(nn.Module):
@@ -142,6 +143,8 @@ class Transformer(nn.Module):
         temperature: float = 1.0,
         top_k: int | None = None,
         context_window: int | None = None,
+        top_p: float | None = None,
+        min_p: float | None = None,
     ) -> torch.Tensor:
         """
         Generates new tokens given a starting sequence.
@@ -155,6 +158,10 @@ class Transformer(nn.Module):
             context_window (int, optional): How many recent tokens the model sees. Defaults to
                 ``context_length``. Pass the window the model was trained on when it was
                 shorter, because positions it never saw in training have untrained embeddings.
+            top_p (float, optional): Sample from the most likely tokens whose probabilities
+                add up to top_p (nucleus sampling).
+            min_p (float, optional): Sample only from tokens at least min_p times as likely as
+                the most likely one.
 
         Returns:
             torch.Tensor: The extended sequence of tokens.
@@ -163,10 +170,8 @@ class Transformer(nn.Module):
         for _ in range(max_new_tokens):
             idx_cond = idx[:, -window:]
             logits, _ = self(idx_cond)
-            logits = logits[:, -1, :] / max(temperature, 1e-6)
-            if top_k is not None:
-                kth = torch.topk(logits, min(top_k, logits.size(-1))).values[:, [-1]]
-                logits = logits.masked_fill(logits < kth, float('-inf'))
+            # temperature, then top-k / top-p / min-p filtering (src/inference/sampling.py)
+            logits = filter_logits(logits[:, -1, :], temperature, top_k, top_p, min_p)
             probs = F.softmax(logits, dim=-1)
             idx_next = torch.multinomial(probs, num_samples=1)
             idx = torch.cat((idx, idx_next), dim=1)
