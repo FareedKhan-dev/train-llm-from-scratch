@@ -23,17 +23,16 @@ metric is **greedy GSM8K accuracy across stages**.
 
 ## 0. Environment
 
-H100s need CUDA-12 wheels (the original `requirements.txt` pins cu118 for the legacy
-pretraining path and is left untouched). Use a separate venv + `requirements-post.txt`,
-and keep all large artifacts on the big `/ephemeral` disk.
+Install the repo with the training extras. Data, checkpoints and logs go to `data/`, `models/`
+and `logs/` inside the repo; point the configs elsewhere to use a bigger disk.
 
 ```bash
-python3 -m venv /ephemeral/venv && source /ephemeral/venv/bin/activate
-pip install -r requirements-post.txt        # torch cu121 + datasets/wandb/tiktoken/h5py
-export HF_HOME=/ephemeral/hf_cache
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[train]"                  # torch + datasets/wandb/tiktoken/h5py
+# optional: export HF_HOME=/path/to/big/disk/hf_cache
 ```
 
-Run everything from the repo root with `PYTHONPATH=.`. Single GPU: `python scripts/X.py`.
+Run everything from the repo root. Single GPU: `python scripts/X.py`.
 Both GPUs: `torchrun --standalone --nproc_per_node=2 scripts/X.py` (DDP + bf16, one code path).
 
 Config lives in [config/post_training_config.py](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/config/post_training_config.py) as
@@ -45,26 +44,26 @@ The default base model is ~400M (`n_embed=1024, n_head=16, n_blocks=24, context_
 ## 1. Pretrain the base (the long pole)
 
 ```bash
-# one-time data prep (Pile -> flat-token HDF5 on /ephemeral)
-PYTHONPATH=. python scripts/prepare_pretrain_data.py --split val   --out /ephemeral/data/pile_dev.h5
-PYTHONPATH=. python scripts/prepare_pretrain_data.py --split train --num_shards 1 --out /ephemeral/data/pile_train.h5
+# one-time data prep (Pile -> flat-token HDF5 in data/)
+python scripts/prepare_pretrain_data.py --split val   --out data/pile_dev.h5
+python scripts/prepare_pretrain_data.py --split train --num_shards 1 --out data/pile_train.h5
 
-# pretrain (multi-day for full quality; checkpoints continuously to /ephemeral/ckpts/base_pretrained.pt)
-PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/pretrain_base.py
+# pretrain (multi-day for full quality; checkpoints continuously to models/base_pretrained.pt)
+torchrun --standalone --nproc_per_node=2 scripts/pretrain_base.py
 ```
 
 [scripts/pretrain_base.py](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/scripts/pretrain_base.py) upgrades the original
 `train_transformer.py` recipe with DDP, bf16 autocast, gradient accumulation, a cosine LR
 schedule with warmup, and periodic checkpointing: everything needed to train a mid-size
-model on 2×H100. The original training script is untouched.
+model on 2×H100. The original training script, `scripts/train_transformer.py`, still works as the README teaches.
 
 ---
 
 ## 2. SFT (instruction tuning)
 
 ```bash
-PYTHONPATH=. python scripts/prepare_sft_data.py --context_length 1024      # Alpaca+Dolly+GSM8K -> packed HDF5
-PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_sft.py # -> /ephemeral/ckpts/sft.pt
+python scripts/prepare_sft_data.py --context_length 1024      # Alpaca+Dolly+GSM8K -> packed HDF5
+torchrun --standalone --nproc_per_node=2 scripts/train_sft.py # -> models/sft.pt
 ```
 
 - **From-scratch loss:** prompt-masked next-token CE in
@@ -81,8 +80,8 @@ PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_sft.py # -> 
 ## 3. Reward Model
 
 ```bash
-PYTHONPATH=. python scripts/prepare_preference_data.py --source both   # HH-RLHF + UltraFeedback -> JSONL
-PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_reward.py  # -> reward.pt
+python scripts/prepare_preference_data.py --source both   # HH-RLHF + UltraFeedback -> JSONL
+torchrun --standalone --nproc_per_node=2 scripts/train_reward.py  # -> reward.pt
 ```
 
 - **From-scratch:** a scalar reward head on the SFT backbone
@@ -95,7 +94,7 @@ PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_reward.py  #
 ## 4. DPO / ORPO / KTO
 
 ```bash
-PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_dpo.py --loss_type dpo --beta 0.1
+torchrun --standalone --nproc_per_node=2 scripts/train_dpo.py --loss_type dpo --beta 0.1
 #   --loss_type orpo   (reference-free, folds SFT+alignment into one stage)
 #   --loss_type kto    (unpaired, reference-KL baseline)
 ```
@@ -109,8 +108,8 @@ PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_dpo.py --los
 ## 5. PPO (classic RLHF)
 
 ```bash
-PYTHONPATH=. python scripts/prepare_rl_prompts.py                 # GSM8K + arithmetic warm-up -> JSONL
-PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_ppo.py --reward_source verifier
+python scripts/prepare_rl_prompts.py                 # GSM8K + arithmetic warm-up -> JSONL
+torchrun --standalone --nproc_per_node=2 scripts/train_ppo.py --reward_source verifier
 #   --reward_source rm   to use the trained reward model instead of the GSM8K checker
 ```
 
@@ -124,7 +123,7 @@ PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_ppo.py --rew
 ## 6. GRPO / RLVR (the 2025 frontier; DeepSeek-R1 style)
 
 ```bash
-PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_grpo.py --group_size 8
+torchrun --standalone --nproc_per_node=2 scripts/train_grpo.py --group_size 8
 ```
 
 - **From-scratch:** group-relative advantages + token-level clipped surrogate with a k3 KL
@@ -143,12 +142,12 @@ reading the model dims from the checkpoint itself, and generates with the chat t
 
 ```bash
 # instruction-tuned models (chat template applied automatically)
-PYTHONPATH=. python scripts/chat.py --ckpt /ephemeral/ckpts/sft.pt  --prompt "What is 13 + 29?"
-PYTHONPATH=. python scripts/chat.py --ckpt /ephemeral/ckpts/grpo.pt --prompt "..." --greedy
+python scripts/chat.py --ckpt models/sft.pt  --prompt "What is 13 + 29?"
+python scripts/chat.py --ckpt models/grpo.pt --prompt "..." --greedy
 # base model continuation
-PYTHONPATH=. python scripts/chat.py --ckpt /ephemeral/ckpts/base_pretrained.pt --raw --prompt "Once upon a time"
+python scripts/chat.py --ckpt models/base_pretrained.pt --raw --prompt "Once upon a time"
 # interactive REPL (omit --prompt); sampling via --temperature/--top_p/--top_k or --greedy
-PYTHONPATH=. python scripts/chat.py --ckpt /ephemeral/ckpts/sft.pt
+python scripts/chat.py --ckpt models/sft.pt
 ```
 
 Generation reuses the same tested core as training/eval
@@ -159,21 +158,21 @@ Generation reuses the same tested core as training/eval
 
 ```bash
 for s in base_pretrained sft dpo ppo grpo; do
-  PYTHONPATH=. python scripts/eval_post_training.py --ckpt /ephemeral/ckpts/$s.pt \
-    --label $s --limit 200 --append /ephemeral/logs/stage_table.jsonl
+  python scripts/eval_post_training.py --ckpt models/$s.pt \
+    --label $s --limit 200 --append logs/stage_table.jsonl
 done
-PYTHONPATH=. python scripts/eval_post_training.py --table /ephemeral/logs/stage_table.jsonl
+python scripts/eval_post_training.py --table logs/stage_table.jsonl
 ```
 
-Every trainer also writes a JSONL metrics file under `/ephemeral/logs/` (plottable without
+Every trainer also writes a JSONL metrics file under `logs/` (plottable without
 any external service); pass `--use_wandb true` to also mirror to Weights & Biases.
 
 ---
 
 ## Design notes (why it's built this way)
 
-- **Wrap, don't rewrite.** The educational `Transformer`/`Block`/`Head`/`MLP` are unchanged
-  except one additive method, `forward_hidden` (returns post-final-LN hidden states the
+- **Wrap, don't rewrite.** The educational `Transformer`/`Block`/`Head`/`MLP` keep their original
+  structure; post-training only needs one additive method, `forward_hidden` (returns post-final-LN hidden states the
   heads consume). Value head, reward head, and all RL log-prob math compose around it.
 - **Causal attention ⇒ right-padding is safe.** The last real token never attends to
   padding after it, so RM (last-token reward) and DPO (masked response) need no attention
@@ -188,7 +187,7 @@ any external service); pass `--use_wandb true` to also mirror to Weights & Biase
 ## Tests
 
 ```bash
-PYTHONPATH=. python tests/test_post_training_smoke.py   # core math: log-probs, heads, parsing, masking
+python tests/test_post_training_smoke.py   # core math: log-probs, heads, parsing, masking
 ```
 
 Each trainer also runs end-to-end on a tiny model in seconds (see the smoke commands used

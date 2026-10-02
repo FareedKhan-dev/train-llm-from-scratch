@@ -11,7 +11,7 @@ streamlit run ui/app.py
 ## What's inside
 
 - **Home**: the pipeline diagram, live job status, and GPU status at a glance.
-- **Data**: launch the `prepare_*` scripts and watch the files appear under `/ephemeral/data`.
+- **Data**: launch the `prepare_*` scripts and watch the files appear under `data/`.
 - **A page per stage** (Pretrain, SFT, Reward, DPO, PPO, GRPO). Each page gives you:
     1. the **theory + hand-drawn diagram** for that stage (pulled straight from these docs),
     2. a **config form** that writes the stage's `configs/*.json`,

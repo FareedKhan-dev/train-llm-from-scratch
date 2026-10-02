@@ -38,8 +38,8 @@ source; the CLI wins for quick one-offs. JSON `null` maps to Python `None` (the 
     ```jsonc
     // configs/sft.json
     {
-      "pretrained_ckpt": "/ephemeral/ckpts/base_pretrained.pt",
-      "data_path": "/ephemeral/data/sft_packed.h5",
+      "pretrained_ckpt": "models/base_pretrained.pt",
+      "data_path": "data/sft_packed.h5",
       "lr": 1e-5,
       "epochs": 3,
       "batch_size": 16
@@ -61,5 +61,5 @@ source; the CLI wins for quick one-offs. JSON `null` maps to Python `None` (the 
     ```
 
 Every trainer accepts `--config <path>` (defaulting to its stage file), all `--field` overrides, and
-`--print-config`. The legacy pretraining path (`scripts/train_transformer.py` + `config/config.py`) is
-untouched and still works as the README teaches.
+`--print-config`. The legacy pretraining path (`scripts/train_transformer.py` + `config/config.py`)
+still works as the README teaches, and also takes `--preset` for the laptop-sized models.

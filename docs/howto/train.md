@@ -18,8 +18,8 @@ file with `--config`). Use `python` for one GPU and `torchrun` for many.
 === "1. Data"
 
     ```bash
-    python scripts/prepare_pretrain_data.py --split val   --out /ephemeral/data/pile_dev.h5
-    python scripts/prepare_pretrain_data.py --split train --num_shards 1 --out /ephemeral/data/pile_train.h5
+    python scripts/prepare_pretrain_data.py --split val   --out data/pile_dev.h5
+    python scripts/prepare_pretrain_data.py --split train --num_shards 1 --out data/pile_train.h5
     python scripts/prepare_sft_data.py
     python scripts/prepare_preference_data.py --source both
     python scripts/prepare_rl_prompts.py
@@ -60,8 +60,8 @@ bash scripts/run_posttraining.sh        # SFT → RM → DPO → PPO → GRPO �
 
 ## Where outputs go
 
-- Checkpoints → `/ephemeral/ckpts/<stage>.pt` (each carries its own resolved `cfg`).
-- Metrics → `/ephemeral/logs/<stage>_<timestamp>.jsonl` (one JSON per logged step). The UI plots these
+- Checkpoints → `models/<stage>.pt` (each carries its own resolved `cfg`).
+- Metrics → `logs/<stage>_<timestamp>.jsonl` (one JSON per logged step). The UI plots these
   live; you can also `--use_wandb true` to mirror to Weights & Biases.
 
 Then [evaluate](../08_evaluation.md) on GSM8K and [chat](../09_inference.md) with any checkpoint.
