@@ -2,7 +2,7 @@
 Background job manager for the control panel.
 
 Launches the real training / data-prep scripts as detached subprocesses, captures their
-output to a logfile, and records a tiny JSON registry under /ephemeral/ui_jobs/ so jobs
+output to a logfile, and records a tiny JSON registry under logs/ui_jobs/ so jobs
 survive Streamlit reruns and page navigation. Includes a GPU-busy guard so we never start a
 second multi-GPU job on top of a running one (which would OOM the H100s).
 """
@@ -16,10 +16,10 @@ import subprocess
 import sys
 import time
 
-from ui.stages import REPO_ROOT
+from ui.stages import LOG_DIR, REPO_ROOT
 
-JOB_DIR = "/ephemeral/ui_jobs"
-_TORCHRUN = os.path.join(os.path.dirname(sys.executable), "torchrun")
+JOB_DIR = os.path.join(LOG_DIR, "ui_jobs")
+IS_WINDOWS = os.name == "nt"
 
 
 def _ensure_job_dir() -> None:
@@ -50,32 +50,46 @@ def read_registry(job_id: str) -> dict | None:
         return None
 
 
-def _alive(pid: int) -> bool:
+def _alive_windows(pid: int) -> bool:
+    """Ask Windows whether ``pid`` is still running (never os.kill: on Windows it terminates)."""
+    import ctypes
+    from ctypes import wintypes
+
+    PROCESS_QUERY_LIMITED_INFORMATION, STILL_ACTIVE = 0x1000, 259
+    kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+    handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    if not handle:
+        return False
     try:
-        os.kill(pid, 0)
+        code = wintypes.DWORD()
+        return bool(kernel32.GetExitCodeProcess(handle, ctypes.byref(code))) and code.value == STILL_ACTIVE
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def _alive(pid: int) -> bool:
+    if IS_WINDOWS:
+        return _alive_windows(pid)
+    try:
+        os.kill(pid, 0)  # signal 0 only checks that the process exists (POSIX)
     except OSError:
         return False
-    # A finished detached child lingers as a zombie (parent = this process) and still
-    # passes kill(pid, 0). Treat zombies as dead and best-effort reap them.
+    # A finished child of this process lingers as a zombie and still passes kill(pid, 0).
+    # waitpid reaps it and tells us it is done. Jobs started by an earlier Streamlit process
+    # are not our children, and kill(pid, 0) above is the answer for them.
     try:
-        with open(f"/proc/{pid}/stat") as f:
-            state = f.read().rsplit(") ", 1)[1].split(" ", 1)[0]
-        if state == "Z":
-            try:
-                os.waitpid(pid, os.WNOHANG)
-            except OSError:
-                pass
-            return False
-    except (FileNotFoundError, IndexError):
-        return False
-    return True
+        done_pid, _ = os.waitpid(pid, os.WNOHANG)
+        return done_pid != pid
+    except ChildProcessError:
+        return True
 
 
 def build_argv(script: str, config_json: str, nproc: int, multi_gpu: bool, extra: list[str] | None = None) -> list[str]:
     """Construct the exact command (torchrun for multi-GPU, else python)."""
     base = [script, "--config", config_json] + (extra or [])
     if multi_gpu and nproc > 1:
-        return [_TORCHRUN, "--standalone", f"--nproc_per_node={nproc}", *base]
+        # `python -m torch.distributed.run` is torchrun, and works on every OS and venv layout.
+        return [sys.executable, "-m", "torch.distributed.run", "--standalone", f"--nproc_per_node={nproc}", *base]
     return [sys.executable, *base]
 
 
@@ -85,12 +99,11 @@ def launch(job_id: str, argv: list[str], *, kind: str = "cpu") -> dict:
     log_path = _log(job_id)
     env = {**os.environ, "PYTHONPATH": REPO_ROOT}
     env.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
-    env.setdefault("HF_HOME", "/ephemeral/hf_cache")
     logf = open(log_path, "wb")
-    proc = subprocess.Popen(
-        argv, cwd=REPO_ROOT, env=env, stdout=logf, stderr=subprocess.STDOUT,
-        start_new_session=True,   # own process group -> killpg reaches all torchrun ranks
-    )
+    # Own process group, so stop() reaches every torchrun rank.
+    group = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if IS_WINDOWS
+             else {"start_new_session": True})
+    proc = subprocess.Popen(argv, cwd=REPO_ROOT, env=env, stdout=logf, stderr=subprocess.STDOUT, **group)
     rec = dict(job_id=job_id, pid=proc.pid, cmd=argv, log=log_path, kind=kind,
                started=time.time(), status="running")
     _write_registry(job_id, rec)
@@ -115,10 +128,21 @@ def stop(job_id: str) -> bool:
     rec = read_registry(job_id)
     if not rec:
         return False
-    try:
-        os.killpg(os.getpgid(rec["pid"]), signal.SIGTERM)
-    except OSError:
-        return False
+    if IS_WINDOWS:
+        # /T stops the whole process tree (every torchrun rank). Its exit code can report a
+        # child that already exited, so success means "the job is gone", checked below.
+        subprocess.run(["taskkill", "/PID", str(rec["pid"]), "/T", "/F"], capture_output=True)
+        for _ in range(20):
+            if not _alive(rec["pid"]):
+                break
+            time.sleep(0.1)
+        else:
+            return False
+    else:
+        try:
+            os.killpg(os.getpgid(rec["pid"]), signal.SIGTERM)
+        except OSError:
+            return False
     rec["status"] = "stopped"
     _write_registry(job_id, rec)
     return True

@@ -1,4 +1,6 @@
 {
+  "sft_ckpt": "models/smoke/sft.pt",
+  "out_ckpt": "models/smoke/grpo.pt",
   "iterations": 2,
   "prompts_per_iter": 2,
   "group_size": 4,

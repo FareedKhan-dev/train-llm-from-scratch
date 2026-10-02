@@ -1,13 +1,14 @@
-import os
-import json
-import zstandard as zstd
-import tiktoken
-import h5py
-from tqdm import tqdm
 import argparse
-from typing import Optional
+import json
+import os
 
-def process_files(input_dir: str, output_file: str, tokenizer_name: str, max_data: Optional[int] = None) -> None:
+import h5py
+import tiktoken
+import zstandard as zstd
+from tqdm import tqdm
+
+
+def process_files(input_dir: str, output_file: str, tokenizer_name: str, max_data: int | None = None) -> None:
     """
     Process a specified number of lines from each .jsonl.zst file in the input directory
     and save encoded tokens to an HDF5 file.

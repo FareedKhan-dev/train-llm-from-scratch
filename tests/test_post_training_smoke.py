@@ -9,15 +9,17 @@ Run from the repo root:
 import torch
 import torch.nn.functional as F
 
+from data_loader.preference_dataset import _collate
 from src.models.transformer import Transformer
 from src.post_training import chat_template as ct
-from src.post_training.rollout import (
-    generate_with_logprobs, compute_logprobs, filter_logits,
-)
-from src.post_training.value_head import TransformerWithValueHead
 from src.post_training.reward_model import RewardModel
-from src.post_training.utils import make_frozen_copy, gather_last, masked_mean, build_model_from_config
-from src.post_training.rewards import extract_answer, gsm8k_gold_answer, reward_gsm8k, is_correct
+from src.post_training.rewards import extract_answer, gsm8k_gold_answer, is_correct, reward_gsm8k
+from src.post_training.rollout import (
+    compute_logprobs,
+    generate_with_logprobs,
+)
+from src.post_training.utils import build_model_from_config, gather_last, make_frozen_copy, masked_mean
+from src.post_training.value_head import TransformerWithValueHead
 
 
 def _tiny_model(vocab=64, ctx=32):
@@ -125,8 +127,40 @@ def test_reward_parsing():
     print("ok  reward parsing + verifier scoring")
 
 
+def test_preference_truncation_preserves_responses():
+    row = {
+        "prompt": "Explain every step in detail. " * 100,
+        "chosen": "Shared response prefix, followed by the preferred ending.",
+        "rejected": "Shared response prefix, followed by the rejected ending.",
+    }
+    batch = _collate([row], max_len=32, device="cpu")
+    chosen_mask = batch["chosen_mask"][0].bool()
+    rejected_mask = batch["rejected_mask"][0].bool()
+
+    assert chosen_mask.any(), "truncation must retain chosen completion targets"
+    assert rejected_mask.any(), "truncation must retain rejected completion targets"
+
+    chosen_start = chosen_mask.nonzero()[0, 0]
+    rejected_start = rejected_mask.nonzero()[0, 0]
+    assert chosen_start == rejected_start, "both sides must keep the same prompt length"
+    assert torch.equal(
+        batch["chosen_ids"][0, :chosen_start],
+        batch["rejected_ids"][0, :rejected_start],
+    ), "both sides must be conditioned on the same truncated prompt"
+    assert batch["chosen_ids"][0].tolist() != batch["rejected_ids"][0].tolist(), (
+        "truncation must retain enough response tokens to distinguish the pair"
+    )
+    chosen_full_mask = ct.encode_chat([{"role": "assistant", "content": row["chosen"]}])[1]
+    rejected_full_mask = ct.encode_chat([{"role": "assistant", "content": row["rejected"]}])[1]
+    assert chosen_mask.sum().item() == sum(chosen_full_mask)
+    assert rejected_mask.sum().item() == sum(rejected_full_mask)
+    assert batch["chosen_ids"][0, chosen_mask][-1].item() == ct.EOT_ID
+    assert batch["rejected_ids"][0, rejected_mask][-1].item() == ct.EOT_ID
+    print("ok  preference truncation retains responses over a shared prompt")
+
+
 def test_build_from_config():
-    from config.post_training_config import smoke, SFTConfig
+    from config.post_training_config import SFTConfig, smoke
     cfg = smoke(SFTConfig)
     m = build_model_from_config(cfg)
     assert m.context_length == 64 and m.lm_head.out_features == 256
@@ -143,5 +177,6 @@ if __name__ == "__main__":
     test_frozen_copy_and_reductions()
     test_chat_template_masking()
     test_reward_parsing()
+    test_preference_truncation_preserves_responses()
     test_build_from_config()
     print("\nALL SMOKE TESTS PASSED")

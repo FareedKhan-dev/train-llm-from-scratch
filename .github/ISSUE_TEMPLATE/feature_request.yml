@@ -1,0 +1,19 @@
+name: Feature request
+description: Suggest an algorithm, a model idea, or an improvement to the tutorial
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like to see?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why is it useful for people learning to train LLMs?
+  - type: textarea
+    id: references
+    attributes:
+      label: Papers or references
+      description: Links to the paper or code the idea comes from, if any.

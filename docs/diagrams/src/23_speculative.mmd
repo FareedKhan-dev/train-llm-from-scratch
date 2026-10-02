@@ -1,0 +1,16 @@
+%%{init: {'look':'handDrawn','theme':'base','themeVariables':{'fontFamily':'Comic Sans MS, cursive'}}}%%
+flowchart LR
+    P([text so far]):::data --> D{{small draft model<br/>guesses k tokens, one by one}}:::model
+    D --> T{{big target model<br/>scores all k in ONE pass}}:::model
+    T --> CHK{keep guess i with<br/>probability min 1, p/q}:::rl
+    CHK -->|kept| NEXT[check the next guess]:::proc
+    NEXT --> CHK
+    CHK -->|rejected| FIX[resample from max 0, p - q<br/>and stop]:::proc
+    CHK -->|all k kept| BONUS[one bonus token<br/>from the target]:::proc
+    FIX --> OUT([append and repeat]):::eval
+    BONUS --> OUT
+    classDef data fill:#d6ffd9,stroke:#27ae60,stroke-width:2px,color:#143d1a;
+    classDef proc fill:#d6e8ff,stroke:#2c6fbb,stroke-width:2px,color:#0d2c52;
+    classDef model fill:#ffe8a3,stroke:#d48806,stroke-width:2px,color:#5a3d00;
+    classDef rl fill:#ffd9b3,stroke:#e67e22,stroke-width:2px,color:#6b3500;
+    classDef eval fill:#e8d6ff,stroke:#8e44ad,stroke-width:2px,color:#3d1a5a;

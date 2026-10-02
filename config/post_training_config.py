@@ -1,60 +1,109 @@
 """
-Configuration for the from-scratch post-training suite.
+Configuration for the post-training suite (and the scalable pretraining script).
 
-Kept entirely separate from ``config/config.py`` (which import-executes for the original
-pretraining path and must stay untouched). Each stage is a frozen-ish dataclass that
-inherits the shared :class:`BaseModelConfig` model/runtime fields and adds its own
-hyperparameters. Construct with overrides, e.g. ``SFTConfig(lr=2e-5, batch_size=16)``.
+Kept separate from ``config/config.py`` (the plain constants of the original pretraining
+path). Each stage is a dataclass that inherits the shared :class:`BaseModelConfig`
+model/runtime fields and adds its own hyperparameters. Construct with overrides, e.g.
+``SFTConfig(lr=2e-5, batch_size=16)``, or load from JSON with :func:`config.loader.load_config`.
+
+The fields are typed (``Literal`` for every choice), and the JSON loader and the CLI check
+values against these types, so a typo such as ``"loss_type": "dop"`` fails at startup with a
+clear message instead of halfway through a run. ``__post_init__`` adds the checks a type
+cannot express (positive sizes, ``n_embed`` divisible by ``n_head``, and so on).
 
 The default base model is ~400M parameters (n_embed=1024, n_head=16, n_blocks=24,
-context_length=1024) -- the "mid" size chosen so real datasets (Alpaca, HH-RLHF, GSM8K)
-give meaningful results while still fitting comfortably on one H100 and training in a
-reasonable time on 2x H100. A tiny ``SMOKE`` variant is provided for fast CPU/1-GPU tests.
+context_length=1024), the "mid" size chosen so real datasets (Alpaca, HH-RLHF, GSM8K) give
+meaningful results while still fitting on one 80GB GPU. A tiny ``SMOKE`` variant is provided
+for fast CPU tests.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
+from typing import Literal, TypeVar
+
+from config.paths import CKPT_DIR, DATA_DIR, LOG_DIR
+
+Arch = Literal["classic", "modern"]
+AttentionKind = Literal["gqa", "mla"]
+AmpDtype = Literal["bf16", "fp16"]
+OptimizerName = Literal["adamw", "muon"]
+Schedule = Literal["cosine", "wsd", "linear"]
+PreferenceLoss = Literal["dpo", "ipo", "simpo", "orpo", "kto"]
+RewardSource = Literal["verifier", "rm"]
+AdvantageNorm = Literal["std", "none"]
+LossAggregation = Literal["token-mean", "seq-mean-token-mean", "seq-mean-token-sum-norm"]
+RatioLevel = Literal["token", "sequence"]
 
 
-# Shared paths (all heavy artifacts live on the 1.5TB /ephemeral disk).
-EPHEMERAL = "/ephemeral"
-CKPT_DIR = f"{EPHEMERAL}/ckpts"
-DATA_DIR = f"{EPHEMERAL}/data"
-LOG_DIR = f"{EPHEMERAL}/logs"
+class ConfigError(ValueError):
+    """A configuration value is missing, has the wrong type, or is out of range."""
+
+
+def _check(cond: bool, message: str) -> None:
+    if not cond:
+        raise ConfigError(message)
 
 
 @dataclass
 class BaseModelConfig:
     # --- model architecture (must match across all stages + the pretrained ckpt) ---
+    arch: Arch = "classic"  # "classic" = the original Transformer, "modern" = Llama-style
     vocab_size: int = 50304
     context_length: int = 1024
     n_embed: int = 1024
     n_head: int = 16
     n_blocks: int = 24
 
+    # --- modern architecture only (ignored when arch="classic"), see src/models/modern ---
+    n_kv_head: int | None = None  # grouped-query attention; None = one KV head per query head
+    attention: AttentionKind = "gqa"  # "mla" = DeepSeek multi-head latent attention
+    kv_latent_dim: int | None = None  # MLA latent size; None = n_embed // 4
+    rope_theta: float = 10_000.0
+    qk_norm: bool = True
+    attn_gate: bool = False
+    sliding_window: int | None = None
+    tie_embeddings: bool = True
+    n_experts: int = 0  # > 0 = Mixture of Experts
+    moe_top_k: int = 2
+    n_shared_experts: int = 0
+
     # --- runtime ---
-    device: str = "cuda"
-    amp_dtype: str | None = "bf16"      # None | "bf16"; bf16 needs no GradScaler on H100
+    device: str = "auto"  # auto | cuda | mps | cpu
+    amp_dtype: AmpDtype | None = "bf16"  # None | "bf16" | "fp16"; ignored on CPU
     seed: int = 1337
-    compile: bool = False               # torch.compile the model (big speedup, slow 1st step)
+    compile: bool = False  # torch.compile the model (big speedup, slow 1st step)
     ckpt_dir: str = CKPT_DIR
     log_dir: str = LOG_DIR
     use_wandb: bool = False
     wandb_project: str = "train-llm-from-scratch-posttrain"
 
+    def __post_init__(self) -> None:
+        for name in ("vocab_size", "context_length", "n_embed", "n_head", "n_blocks"):
+            _check(getattr(self, name) > 0, f"{name} must be positive, got {getattr(self, name)}")
+        _check(self.n_embed % self.n_head == 0,
+               f"n_embed ({self.n_embed}) must be divisible by n_head ({self.n_head})")
+        if self.n_kv_head is not None:
+            _check(self.n_kv_head > 0 and self.n_head % self.n_kv_head == 0,
+                   f"n_head ({self.n_head}) must be divisible by n_kv_head ({self.n_kv_head})")
+        _check(self.n_experts >= 0, "n_experts must be >= 0")
+        if self.n_experts:
+            _check(1 <= self.moe_top_k <= self.n_experts, "moe_top_k must be between 1 and n_experts")
+
 
 @dataclass
 class PretrainConfig(BaseModelConfig):
     """Pretrain the mid base model from scratch on the Pile HDF5 (mix in task text late)."""
-    train_path: str = "data/train/pile_train.h5"
-    dev_path: str = "data/val/pile_dev.h5"
+    train_path: str = f"{DATA_DIR}/pile_train.h5"
+    dev_path: str = f"{DATA_DIR}/pile_dev.h5"
     batch_size: int = 24                # per-GPU micro-batch
     grad_accum: int = 8                 # effective batch = batch_size * grad_accum * world
     train_steps: int = 200_000
     eval_steps: int = 1_000
     eval_iters: int = 100
     warmup_steps: int = 2_000
+    optimizer: OptimizerName = "adamw"  # "muon" = Muon for weight matrices, AdamW for the rest
+    lr_schedule: Schedule = "cosine"    # cosine | wsd (warmup-stable-decay) | linear (to min_lr)
     lr: float = 3e-4
     min_lr: float = 3e-5
     weight_decay: float = 0.1
@@ -62,11 +111,18 @@ class PretrainConfig(BaseModelConfig):
     out_ckpt: str = f"{CKPT_DIR}/base_pretrained.pt"
     save_every: int = 2_000
 
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        _check(self.batch_size > 0 and self.grad_accum > 0, "batch_size and grad_accum must be positive")
+        _check(0 <= self.min_lr <= self.lr, "need 0 <= min_lr <= lr")
+        _check(self.warmup_steps < self.train_steps, "warmup_steps must be smaller than train_steps")
+
 
 @dataclass
 class SFTConfig(BaseModelConfig):
     pretrained_ckpt: str = f"{CKPT_DIR}/base_pretrained.pt"
     data_path: str = f"{DATA_DIR}/sft_packed.h5"
+    dev_path: str = f"{DATA_DIR}/sft_dev_packed.h5"
     out_ckpt: str = f"{CKPT_DIR}/sft.pt"
     batch_size: int = 16
     grad_accum: int = 2
@@ -79,12 +135,22 @@ class SFTConfig(BaseModelConfig):
     weight_decay: float = 0.0
     grad_clip: float = 1.0
     save_every: int = 500
+    # LoRA (0 = full fine-tuning). The adapters are merged into the weights before saving,
+    # so the checkpoint is a normal model every later stage can load.
+    lora_rank: int = 0
+    lora_alpha: float = 16.0
+    lora_dropout: float = 0.0
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        _check(self.lora_rank >= 0, "lora_rank must be >= 0")
 
 
 @dataclass
 class RewardConfig(BaseModelConfig):
     sft_ckpt: str = f"{CKPT_DIR}/sft.pt"
     pref_path: str = f"{DATA_DIR}/preferences.jsonl"
+    test_path: str = f"{DATA_DIR}/preferences_test.jsonl"
     out_ckpt: str = f"{CKPT_DIR}/reward.pt"
     batch_size: int = 8                 # pairs per step (2x sequences through the model)
     epochs: int = 1
@@ -96,15 +162,22 @@ class RewardConfig(BaseModelConfig):
     max_len: int = 768
     save_every: int = 500
 
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        _check(16 <= self.max_len <= self.context_length, "max_len must be between 16 and context_length")
+
 
 @dataclass
 class DPOConfig(BaseModelConfig):
     sft_ckpt: str = f"{CKPT_DIR}/sft.pt"        # init policy + frozen reference
     pref_path: str = f"{DATA_DIR}/preferences.jsonl"
+    test_path: str = f"{DATA_DIR}/preferences_test.jsonl"
     out_ckpt: str = f"{CKPT_DIR}/dpo.pt"
-    loss_type: str = "dpo"              # "dpo" | "orpo" | "kto"
+    loss_type: PreferenceLoss = "dpo"   # dpo | ipo | simpo | orpo | kto
     beta: float = 0.1
-    orpo_lambda: float = 1.0           # ORPO odds-ratio weight (loss_type="orpo")
+    label_smoothing: float = 0.0        # > 0 = conservative DPO for noisy preference labels
+    simpo_gamma: float = 0.5            # SimPO target reward margin
+    orpo_lambda: float = 1.0            # ORPO odds-ratio weight (loss_type="orpo")
     batch_size: int = 8
     epochs: int = 1
     eval_steps: int = 200
@@ -115,6 +188,12 @@ class DPOConfig(BaseModelConfig):
     max_len: int = 768
     save_every: int = 500
 
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        _check(self.beta > 0, "beta must be positive")
+        _check(0.0 <= self.label_smoothing < 0.5, "label_smoothing must be in [0, 0.5)")
+        _check(16 <= self.max_len <= self.context_length, "max_len must be between 16 and context_length")
+
 
 @dataclass
 class PPOConfig(BaseModelConfig):
@@ -123,7 +202,7 @@ class PPOConfig(BaseModelConfig):
     prompt_path: str = f"{DATA_DIR}/rl_prompts_train.jsonl"
     eval_prompt_path: str = f"{DATA_DIR}/rl_prompts_test.jsonl"
     out_ckpt: str = f"{CKPT_DIR}/ppo.pt"
-    reward_source: str = "verifier"    # "verifier" (GSM8K checker) | "rm" (reward model)
+    reward_source: RewardSource = "verifier"  # "verifier" (GSM8K checker) | "rm" (reward model)
     iterations: int = 1_000
     prompts_per_iter: int = 32         # prompts sampled per PPO iteration (per rank)
     rollout_len: int = 300
@@ -159,12 +238,22 @@ class GRPOConfig(BaseModelConfig):
     temperature: float = 1.0
     top_p: float = 1.0
     grpo_epochs: int = 1
-    clip: float = 0.2
+    clip: float = 0.2                 # lower clip range (and upper, unless clip_high is set)
+    clip_high: float | None = None    # DAPO "clip-higher": a larger upper range, e.g. 0.28
     kl_coef: float = 0.04             # KL(policy || ref) penalty term in the loss
+    adv_norm: AdvantageNorm = "std"   # "none" = Dr. GRPO (no division by the group std)
+    loss_agg: LossAggregation = "token-mean"  # how token losses are averaged, see grpo.py
+    ratio_level: RatioLevel = "token"  # "sequence" = GSPO (one importance ratio per answer)
+    filter_groups: bool = False       # DAPO dynamic sampling: skip groups with no reward spread
     lr: float = 1e-6
     grad_clip: float = 1.0
     eval_every: int = 50
     save_every: int = 100
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        _check(self.group_size >= 2, "group_size must be at least 2 (the group is the baseline)")
+        _check(self.clip > 0 and (self.clip_high is None or self.clip_high > 0), "clip ranges must be positive")
 
 
 # Tiny config for fast smoke tests (CPU or a single GPU, seconds not hours).
@@ -172,7 +261,12 @@ SMOKE = dict(
     vocab_size=256, context_length=64, n_embed=64, n_head=4, n_blocks=2, device="cpu", amp_dtype=None
 )
 
+C = TypeVar("C", bound=BaseModelConfig)
 
-def smoke(cfg_cls):
+
+def smoke(cfg_cls: type[C]) -> C:
     """Return an instance of ``cfg_cls`` shrunk to the tiny SMOKE model dims."""
-    return replace(cfg_cls(), **SMOKE)
+    overrides: dict[str, object] = dict(SMOKE)
+    if "max_len" in cfg_cls.__dataclass_fields__:
+        overrides["max_len"] = SMOKE["context_length"]
+    return replace(cfg_cls(), **overrides)  # type: ignore[arg-type]

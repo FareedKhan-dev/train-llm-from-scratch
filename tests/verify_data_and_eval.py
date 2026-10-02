@@ -2,7 +2,7 @@
 Deep correctness checks on the REAL prepared data and the evaluation benchmark.
 No training, no GPU -- inspects the actual files on disk and the scoring logic.
 
-    PYTHONPATH=. python tests/verify_data_and_eval.py
+    python tests/verify_data_and_eval.py
 """
 
 import json
@@ -10,10 +10,10 @@ import json
 import h5py
 import numpy as np
 
-from src.post_training.chat_template import EOT_ID, decode, encode_chat, ASSISTANT_HEADER
-from src.post_training.rewards import gsm8k_gold_answer, extract_answer, is_correct, reward_gsm8k
+from src.post_training.chat_template import ASSISTANT_HEADER, EOT_ID, decode, encode_chat
+from src.post_training.rewards import extract_answer, gsm8k_gold_answer, is_correct, reward_gsm8k
 
-DATA = "/ephemeral/data"
+DATA = "data"
 PASS, FAIL = "PASS", "FAIL"
 
 
@@ -86,8 +86,6 @@ def verify_rl_prompts_and_gold():
     check("gsm8k test prompts present", len(rows) > 100, f"{len(rows)} prompts")
     check("all have numeric gold", all(isinstance(r["gold"], (int, float)) for r in rows))
     # Cross-check gold against the live GSM8K dataset for a few rows.
-    import os
-    os.environ.setdefault("HF_HOME", "/ephemeral/hf_cache")
     from datasets import load_dataset
     ds = load_dataset("openai/gsm8k", "main", split="test")
     by_q = {ex["question"].strip(): ex["answer"] for ex in ds}
@@ -106,8 +104,6 @@ def verify_eval_benchmark():
     """Prove the GSM8K scoring is correct independent of any model: a response containing
     the gold scores correct; a wrong number scores incorrect."""
     print("\n== Evaluation benchmark scoring (GSM8K verifier) ==")
-    import os
-    os.environ.setdefault("HF_HOME", "/ephemeral/hf_cache")
     from datasets import load_dataset
     ds = load_dataset("openai/gsm8k", "main", split="test").select(range(100))
 

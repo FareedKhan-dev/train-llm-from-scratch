@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from typing import cast
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint as checkpoint
+from src.inference.sampling import filter_logits
 from src.models.transformer_block import Block
 
 class Transformer(nn.Module):
@@ -20,6 +23,8 @@ class Transformer(nn.Module):
         vocab_size (int): The size of the vocabulary.
         N_BLOCKS (int): The number of transformer blocks in the model.
     """
+    pos_idxs: torch.Tensor  # positions 0..context_length-1, registered as a buffer in __init__
+
     def __init__(self, n_head: int, n_embed: int, context_length: int, vocab_size: int, N_BLOCKS: int) -> None:
         """
         Initializes the Transformer model.
@@ -87,7 +92,7 @@ class Transformer(nn.Module):
                 x = block(x)
         return self.layer_norm(x)
 
-    def forward(self, idx: torch.Tensor, targets: torch.Tensor = None) -> tuple[torch.Tensor, torch.Tensor | None]:
+    def forward(self, idx: torch.Tensor, targets: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor | None]:
         """
         Forward pass through the Transformer.
 
@@ -115,33 +120,58 @@ class Transformer(nn.Module):
         """
         Forward pass focusing on the embedding and attention blocks.
 
+        Runs every block normally except the last one, which returns its MLP hidden
+        activations (size ``4 * n_embed``) together with its residual stream.
+
         Args:
             idx (torch.Tensor): Input token indices.
 
         Returns:
-            tuple: Output after attention blocks and the residual.
+            tuple: The last block's MLP hidden activations and its residual stream.
         """
         x = self._pre_attn_pass(idx)
-        residual = x
-        for block in self.attn_blocks:
-            x, residual = block.forward_embedding(x)
-        return x, residual
+        for block in self.attn_blocks[:-1]:
+            x = block(x)
+        last_block = cast(Block, self.attn_blocks[-1])
+        return last_block.forward_embedding(x)
 
-    def generate(self, idx: torch.Tensor, max_new_tokens: int) -> torch.Tensor:
+    @torch.no_grad()
+    def generate(
+        self,
+        idx: torch.Tensor,
+        max_new_tokens: int,
+        temperature: float = 1.0,
+        top_k: int | None = None,
+        context_window: int | None = None,
+        top_p: float | None = None,
+        min_p: float | None = None,
+    ) -> torch.Tensor:
         """
         Generates new tokens given a starting sequence.
 
         Args:
             idx (torch.Tensor): Initial sequence of token indices.
             max_new_tokens (int): Number of tokens to generate.
+            temperature (float): Divide the logits by this before sampling. Below 1 makes the
+                text safer and more repetitive, above 1 more random.
+            top_k (int, optional): Sample only from the k most likely tokens.
+            context_window (int, optional): How many recent tokens the model sees. Defaults to
+                ``context_length``. Pass the window the model was trained on when it was
+                shorter, because positions it never saw in training have untrained embeddings.
+            top_p (float, optional): Sample from the most likely tokens whose probabilities
+                add up to top_p (nucleus sampling).
+            min_p (float, optional): Sample only from tokens at least min_p times as likely as
+                the most likely one.
 
         Returns:
             torch.Tensor: The extended sequence of tokens.
         """
+        window = min(context_window or self.context_length, self.context_length)
         for _ in range(max_new_tokens):
-            idx_cond = idx[:, -self.context_length:]
+            idx_cond = idx[:, -window:]
             logits, _ = self(idx_cond)
-            logits = logits[:, -1, :]
+            # temperature, then top-k / top-p / min-p filtering (src/inference/sampling.py)
+            logits = filter_logits(logits[:, -1, :], temperature, top_k, top_p, min_p)
             probs = F.softmax(logits, dim=-1)
             idx_next = torch.multinomial(probs, num_samples=1)
             idx = torch.cat((idx, idx_next), dim=1)

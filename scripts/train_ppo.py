@@ -6,31 +6,41 @@ reward, or a trained reward model), add a per-token KL-to-reference penalty, com
 advantages with the shared value head, then run several clipped-surrogate update epochs.
 Reports mean reward, KL, value loss, clip fraction, and held-out GSM8K accuracy.
 
-    PYTHONPATH=. python scripts/train_ppo.py --reward_source verifier
-    PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_ppo.py
+    python scripts/train_ppo.py --reward_source verifier
+    torchrun --standalone --nproc_per_node=2 scripts/train_ppo.py
 """
 
 from __future__ import annotations
 
-import time
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # run from the repo without installing
+
 
 import torch
 import torch.nn.functional as F
 
 from config.post_training_config import PPOConfig
 from data_loader.prompt_dataset import get_prompt_iterator
+from src.post_training.chat_template import decode, encode_prompt
 from src.post_training.cli import parse_config_with_json
-from src.post_training.chat_template import EOT_ID, decode, encode_prompt
-from src.post_training.distributed import ddp_setup, ddp_wrap, cleanup, reduce_scalar
+from src.post_training.distributed import cleanup, ddp_setup, ddp_wrap, reduce_scalar
 from src.post_training.evaluation import gsm8k_accuracy, load_gsm8k_eval
 from src.post_training.logging_utils import MetricsLogger
 from src.post_training.optim import configure_optimizer
-from src.post_training.ppo import compute_gae, whiten, ppo_policy_loss, ppo_value_loss, approx_kl
+from src.post_training.ppo import approx_kl, compute_gae, ppo_policy_loss, ppo_value_loss, whiten
 from src.post_training.reward_model import load_reward_model
 from src.post_training.rewards import reward_gsm8k
 from src.post_training.rollout import compute_logprobs, rollout_prompts
 from src.post_training.utils import (
-    amp_autocast, load_backbone_from_ckpt, make_frozen_copy, masked_mean, save_stage_ckpt, set_seed, unwrap,
+    amp_autocast,
+    load_backbone_from_ckpt,
+    make_frozen_copy,
+    masked_mean,
+    save_stage_ckpt,
+    set_seed,
+    unwrap,
 )
 from src.post_training.value_head import TransformerWithValueHead
 

@@ -13,8 +13,8 @@ import torch
 
 from src.models.transformer import Transformer
 from src.post_training.grpo import group_advantages, grpo_loss
-from src.post_training.ppo import compute_gae, whiten, ppo_policy_loss, ppo_value_loss
-from src.post_training.rollout import generate_with_logprobs, compute_logprobs
+from src.post_training.ppo import compute_gae, ppo_policy_loss, ppo_value_loss, whiten
+from src.post_training.rollout import compute_logprobs, generate_with_logprobs
 from src.post_training.utils import make_frozen_copy, set_seed
 from src.post_training.value_head import TransformerWithValueHead
 
@@ -41,7 +41,7 @@ def verify_grpo_optimizes():
     G = 8
     prompt = torch.zeros(1, PROMPT_LEN, dtype=torch.long)
     history = []
-    for it in range(60):
+    for _ in range(60):
         batch = prompt.repeat(G, 1)
         rb = generate_with_logprobs(policy, batch, GEN, temperature=1.0)
         seqs, rmask = rb.sequences, rb.response_mask
@@ -62,13 +62,12 @@ def verify_grpo_optimizes():
 def verify_ppo_optimizes():
     print("\n== PPO optimizes reward (real GAE + clipped losses path) ==")
     backbone = tiny_model()
-    ref = make_frozen_copy(backbone)
     actor = TransformerWithValueHead(backbone)
     opt = torch.optim.Adam(actor.parameters(), lr=1e-2)
     B = 8
     prompt = torch.zeros(B, PROMPT_LEN, dtype=torch.long)
     history = []
-    for it in range(60):
+    for _ in range(60):
         rb = generate_with_logprobs(actor, prompt, GEN, temperature=1.0)
         seqs, rmask = rb.sequences, rb.response_mask
         resp = rmask[:, 1:]

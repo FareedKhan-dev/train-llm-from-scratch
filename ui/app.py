@@ -1,5 +1,5 @@
 """
-Train LLM From Scratch — control panel (Home).
+Train LLM From Scratch: control panel (Home).
 
 Run with:  streamlit run ui/app.py
 """
@@ -14,8 +14,8 @@ from ui import jobs, theme
 from ui.stages import ABS_DOC, STAGES
 
 theme.setup_page("Control Panel", "🧠")
-theme.hero("🧠  Train LLM From Scratch — Control Panel",
-           "Pretrain → SFT → Reward Model → DPO → PPO → GRPO · evaluate · chat — all from one place.")
+theme.hero("🧠  Train LLM From Scratch: Control Panel",
+           "Pretrain → SFT → Reward Model → DPO → PPO → GRPO · evaluate · chat, all from one place.")
 
 # Master pipeline diagram (the hand-drawn overview).
 overview = ABS_DOC("docs/diagrams/00_overview.png")
@@ -35,7 +35,7 @@ if gpus:
     for col, (i, name, used, total, util) in zip(cols, gpus):
         col.metric(f"GPU {i} · {name.split(' ')[-1]}", f"{used/1024:.0f}/{total/1024:.0f} GB", f"{util}% util")
 else:
-    st.info("No GPUs detected (nvidia-smi unavailable) — CPU / smoke mode only.")
+    st.info("No GPUs detected (nvidia-smi unavailable): CPU / smoke mode only.")
 
 # --- Job status ---
 st.subheader("📋  Jobs")

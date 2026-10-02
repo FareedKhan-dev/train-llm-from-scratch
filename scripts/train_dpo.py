@@ -1,16 +1,25 @@
 """
-Direct Preference Optimization (and ORPO / KTO variants) on preference pairs.
+Direct Preference Optimization and its variants (IPO, SimPO, ORPO, KTO) on preference pairs.
 
 The policy is initialized from the SFT checkpoint; a frozen deep copy of it serves as the
-DPO/KTO reference (ORPO is reference-free). Reports implicit-reward accuracy on held-out
-preferences and GSM8K dev accuracy.
+reference for DPO / IPO / KTO (SimPO and ORPO are reference-free, so no copy is made).
+Reports implicit-reward accuracy on held-out preferences.
 
-    PYTHONPATH=. python scripts/train_dpo.py --loss_type dpo --beta 0.1
-    PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_dpo.py
+    python scripts/train_dpo.py --loss_type dpo --beta 0.1
+    python scripts/train_dpo.py --loss_type dpo --label_smoothing 0.1     # conservative DPO
+    python scripts/train_dpo.py --loss_type ipo --beta 0.1
+    python scripts/train_dpo.py --loss_type simpo --beta 2.0 --simpo_gamma 0.5
+    torchrun --standalone --nproc_per_node=2 scripts/train_dpo.py
 """
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # run from the repo without installing
+
+import os
 import time
 
 import torch
@@ -18,16 +27,21 @@ import torch
 from config.post_training_config import DPOConfig
 from data_loader.preference_dataset import get_preference_iterator
 from src.post_training.cli import parse_config_with_json
-from src.post_training.distributed import ddp_setup, ddp_wrap, cleanup, reduce_scalar
-from src.post_training.dpo import dpo_loss, orpo_loss, kto_loss, implicit_accuracy
+from src.post_training.distributed import cleanup, ddp_setup, ddp_wrap, reduce_scalar
+from src.post_training.dpo import dpo_loss, implicit_accuracy, ipo_loss, kto_loss, orpo_loss, simpo_loss
 from src.post_training.logging_utils import MetricsLogger
-from src.post_training.optim import configure_optimizer, cosine_lr
+from src.post_training.optim import configure_optimizer, cosine_lr, set_lr
 from src.post_training.rollout import sequence_logprobs
 from src.post_training.utils import (
-    amp_autocast, load_backbone_from_ckpt, make_frozen_copy, save_stage_ckpt, set_seed, unwrap,
+    amp_autocast,
+    load_backbone_from_ckpt,
+    make_frozen_copy,
+    save_stage_ckpt,
+    set_seed,
+    unwrap,
 )
 
-TEST_PATH = "/ephemeral/data/preferences_test.jsonl"
+REFERENCE_FREE = {"orpo", "simpo"}
 
 
 def _logps(model, ids, mask, requires_grad):
@@ -45,19 +59,25 @@ def _compute_losses(policy, ref, batch, cfg, ctx):
 
     if cfg.loss_type == "orpo":
         return orpo_loss(pc, pr, ncn, nrn, orpo_lambda=cfg.orpo_lambda)
+    if cfg.loss_type == "simpo":
+        return simpo_loss(pc, pr, ncn, nrn, beta=cfg.beta, gamma=cfg.simpo_gamma, label_smoothing=cfg.label_smoothing)
 
     with torch.no_grad(), amp_autocast(cfg.amp_dtype, ctx.device):
         rsum, _ = _logps(ref, ids, mask, requires_grad=False)
     rc, rr = rsum[:B], rsum[B:]
     if cfg.loss_type == "kto":
         return kto_loss(pc, pr, rc, rr, beta=cfg.beta)
-    return dpo_loss(pc, pr, rc, rr, beta=cfg.beta)
+    if cfg.loss_type == "ipo":
+        return ipo_loss(pc, pr, rc, rr, ncn, nrn, beta=cfg.beta)
+    return dpo_loss(pc, pr, rc, rr, beta=cfg.beta, label_smoothing=cfg.label_smoothing)
 
 
 @torch.no_grad()
 def eval_implicit_acc(policy, ref, cfg, ctx, max_batches: int = 100) -> tuple[float, float]:
+    if not os.path.exists(cfg.test_path):
+        return float("nan"), float("nan")
     policy.eval()
-    it = get_preference_iterator(TEST_PATH, cfg.batch_size, cfg.max_len, device=ctx.device,
+    it = get_preference_iterator(cfg.test_path, cfg.batch_size, cfg.max_len, device=ctx.device,
                                  rank=ctx.rank, world_size=ctx.world_size, shuffle=False, infinite=False)
     acc, marg, n = 0.0, 0.0, 0
     for batch in it:
@@ -77,11 +97,11 @@ def main():
     set_seed(cfg.seed + ctx.rank)
 
     policy = load_backbone_from_ckpt(cfg, cfg.sft_ckpt, ctx.device)
-    ref = make_frozen_copy(policy, device=ctx.device) if cfg.loss_type != "orpo" else None
+    ref = make_frozen_copy(policy, device=ctx.device) if cfg.loss_type not in REFERENCE_FREE else None
     policy = ddp_wrap(policy, ctx)
     optimizer = configure_optimizer(unwrap(policy), cfg.lr, cfg.weight_decay)
 
-    with open(cfg.pref_path) as f:
+    with open(cfg.pref_path, encoding="utf-8") as f:
         n_rows = sum(1 for line in f if line.strip())
     total_steps = max(1, (n_rows // (cfg.batch_size * ctx.world_size)) * cfg.epochs)
 
@@ -97,8 +117,7 @@ def main():
     t0 = time.perf_counter()
     for step in range(total_steps):
         lr = cosine_lr(step, warmup_steps=cfg.warmup_steps, max_steps=total_steps, lr=cfg.lr, min_lr=cfg.lr * 0.1)
-        for g in optimizer.param_groups:
-            g["lr"] = lr
+        set_lr(optimizer, lr)
 
         batch = next(train_it)
         loss, cr, rr = _compute_losses(policy, ref, batch, cfg, ctx)

@@ -16,6 +16,9 @@ import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 
+from src.device import configure_cpu_threads, resolve_device
+from src.models.modern.moe import MoE
+
 
 @dataclass
 class DDPContext:
@@ -33,22 +36,27 @@ class DDPContext:
         return self.world_size > 1
 
 
-def ddp_setup(device: str = "cuda") -> DDPContext:
+def ddp_setup(device: str = "auto") -> DDPContext:
     """Initialize the process group if launched under torchrun; otherwise single-process.
+
+    ``device`` is ``"auto"`` (CUDA, then Apple MPS, then CPU), or an explicit ``"cuda"``,
+    ``"mps"`` or ``"cpu"``; an unavailable choice falls back to the CPU with a warning.
 
     Reads ``RANK`` / ``LOCAL_RANK`` / ``WORLD_SIZE`` from the environment (set by
     torchrun). Uses the NCCL backend on CUDA, gloo on CPU.
     """
+    device = resolve_device(device)
     world_size = int(os.environ.get("WORLD_SIZE", "1"))
     if world_size == 1:
-        dev = device if (device == "cuda" and torch.cuda.is_available()) else "cpu"
-        if dev == "cuda":
+        if device == "cuda":
             torch.cuda.set_device(0)
-        return DDPContext(rank=0, local_rank=0, world_size=1, device=dev)
+        elif device == "cpu":
+            configure_cpu_threads()
+        return DDPContext(rank=0, local_rank=0, world_size=1, device=device)
 
     rank = int(os.environ["RANK"])
     local_rank = int(os.environ["LOCAL_RANK"])
-    backend = "nccl" if (device == "cuda" and torch.cuda.is_available()) else "gloo"
+    backend = "nccl" if device == "cuda" else "gloo"
     dist.init_process_group(backend=backend, rank=rank, world_size=world_size)
     if device == "cuda":
         torch.cuda.set_device(local_rank)
@@ -67,11 +75,13 @@ def ddp_wrap(model: torch.nn.Module, ctx: DDPContext, find_unused_parameters: bo
     Pass ``find_unused_parameters=True`` for a model where some parameters do not receive a
     gradient on every step (for example the reward model, which uses the backbone's
     ``forward_hidden`` and a reward head but never its ``lm_head``). Without it, DDP raises
-    a "did not get a gradient" error on the first backward.
+    a "did not get a gradient" error on the first backward. Mixture-of-Experts models turn it
+    on automatically: an expert that no token picked in a step gets no gradient either.
     """
     if not ctx.enabled:
         return model
     device_ids = [ctx.local_rank] if ctx.device.startswith("cuda") else None
+    find_unused_parameters = find_unused_parameters or any(isinstance(m, MoE) for m in model.modules())
     return DDP(model, device_ids=device_ids, find_unused_parameters=find_unused_parameters)
 
 

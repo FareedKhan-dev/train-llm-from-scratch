@@ -1,9 +1,12 @@
 {
+  "arch": "classic",
   "vocab_size": 50304,
   "context_length": 256,
   "n_embed": 128,
   "n_head": 4,
   "n_blocks": 2,
   "device": "cpu",
-  "amp_dtype": null
+  "amp_dtype": null,
+  "ckpt_dir": "models/smoke",
+  "log_dir": "logs/smoke"
 }

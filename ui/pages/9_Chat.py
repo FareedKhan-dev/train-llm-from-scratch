@@ -3,23 +3,26 @@
 from __future__ import annotations
 
 import glob
+import os
 
 import streamlit as st
 
+from src.device import resolve_device
 from ui import theme
+from ui.stages import CKPT_DIR
 
 theme.setup_page("Chat", "💬")
-theme.hero("💬  Chat", "Talk to any checkpoint — chat template for instruction models, raw mode for the base.")
+theme.hero("💬  Chat", "Talk to any checkpoint: chat template for instruction models, raw mode for the base.")
 
-ckpts = sorted(glob.glob("/ephemeral/ckpts/*.pt"))
+ckpts = sorted(glob.glob(os.path.join(CKPT_DIR, "**", "*.pt"), recursive=True))
 if not ckpts:
-    st.warning("No checkpoints in /ephemeral/ckpts yet. Train a stage (or run a smoke job) first.")
+    st.warning("No checkpoints in models/ yet. Train a stage (or run a smoke job) first.")
     st.stop()
 
 with st.sidebar:
     st.header("Generation")
     ckpt = st.selectbox("Checkpoint", ckpts, index=len(ckpts) - 1)
-    device = st.selectbox("Device", ["cuda", "cpu"], index=0)
+    device = resolve_device(st.selectbox("Device", ["auto", "cpu", "cuda", "mps"], index=0))
     raw = st.toggle("Raw mode (base continuation, no chat template)", value=False)
     greedy = st.toggle("Greedy (deterministic)", value=False)
     temperature = st.slider("Temperature", 0.1, 1.5, 0.8, 0.05, disabled=greedy)

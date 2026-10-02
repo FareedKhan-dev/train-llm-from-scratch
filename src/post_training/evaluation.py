@@ -11,8 +11,8 @@ from __future__ import annotations
 import torch
 
 from src.post_training.chat_template import EOT_ID, decode, encode_prompt
-from src.post_training.rollout import generate_with_logprobs
 from src.post_training.rewards import gsm8k_gold_answer, is_correct
+from src.post_training.rollout import generate_with_logprobs
 
 
 def _model_context_length(model) -> int:
@@ -93,7 +93,7 @@ def gsm8k_accuracy(
     responses = batched_generate(model, prompts, max_new_tokens, device=device, greedy=greedy)
 
     correct = 0
-    samples = []
+    samples: list[dict] = []
     for (q, ans), resp in zip(qa_pairs, responses):
         gold = gsm8k_gold_answer(ans)
         ok = is_correct(resp, gold)
@@ -106,8 +106,6 @@ def gsm8k_accuracy(
 
 def load_gsm8k_eval(split: str = "test", limit: int | None = 200) -> list[tuple[str, str]]:
     """Load ``(question, answer_field)`` pairs from GSM8K for evaluation."""
-    import os
-    os.environ.setdefault("HF_HOME", "/ephemeral/hf_cache")
     from datasets import load_dataset
 
     ds = load_dataset("openai/gsm8k", "main", split=split)

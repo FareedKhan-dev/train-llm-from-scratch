@@ -2,7 +2,7 @@
 # Data Handling & Preprocessing
 
 Every stage needs data in a different shape, and getting these shapes right is honestly half the
-battle — a misaligned loss mask or a mis-parsed gold answer will silently wreck training. So before
+battle: a misaligned loss mask or a mis-parsed gold answer will silently wreck training. So before
 any model code, here is exactly how I download and preprocess each dataset, and the format each
 trainer expects.
 
@@ -44,7 +44,7 @@ flowchart TD
 
 </details>
 
-Everything lands on the big `/ephemeral` disk and uses the OpenAI **`r50k_base`** tokenizer
+Everything lands in `data/` (pass other paths to use a bigger disk) and uses the OpenAI **`r50k_base`** tokenizer
 (`vocab_size = 50304`, the only special token is `<|endoftext|>` = id `50256`).
 
 ## 1 · Pretraining data (Pile → flat-token HDF5)
@@ -62,8 +62,8 @@ for ids in enc.encode_ordinary_batch(docs):
 ```
 
 ```bash
-PYTHONPATH=. python scripts/prepare_pretrain_data.py --split val   --out /ephemeral/data/pile_dev.h5
-PYTHONPATH=. python scripts/prepare_pretrain_data.py --split train --num_shards 1 --out /ephemeral/data/pile_train.h5
+python scripts/prepare_pretrain_data.py --split val   --out data/pile_dev.h5
+python scripts/prepare_pretrain_data.py --split train --num_shards 1 --out data/pile_train.h5
 ```
 
 The base [`get_batch_iterator`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/data_loader/data_loader.py) then slices random
@@ -101,11 +101,11 @@ concatenates everything and slices it into fixed `1024`-token rows, writing two 
 `tokens` and `loss_mask`.
 
 ```bash
-PYTHONPATH=. python scripts/prepare_sft_data.py --context_length 1024 --out_dir /ephemeral/data
+python scripts/prepare_sft_data.py --context_length 1024 --out_dir data
 ```
 
 I verified on the real file that the mask covers exactly `<answer>4</answer>` and excludes the user
-question — that alignment is what makes SFT work.
+question. That alignment is what makes SFT work.
 
 ## 3 · Preference data (→ `{prompt, chosen, rejected}` JSONL)
 
@@ -122,18 +122,18 @@ def _split_hh(text):
 
 Output is `preferences.jsonl` (train) + `preferences_test.jsonl` (held-out, for measuring reward-model
 accuracy). [`preference_dataset.py`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/data_loader/preference_dataset.py) tokenizes each side through
-the same chat template and right-pads a batch — which is safe because the model's attention is
+the same chat template and right-pads a batch, which is safe because the model's attention is
 **causal**, so the last real token never attends to padding after it (no attention mask needed).
 
 ```bash
-PYTHONPATH=. python scripts/prepare_preference_data.py --source both --max_per_source 40000
+python scripts/prepare_preference_data.py --source both --max_per_source 40000
 ```
 
 ## 4 · RL prompt data (→ `{prompt, gold}` JSONL)
 
 [`prepare_rl_prompts.py`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/scripts/prepare_rl_prompts.py) turns GSM8K into prompts with a **verifiable
 numeric gold answer** (parsed from the dataset's `#### N`), plus a programmatic **arithmetic curriculum**
-that even a weak policy can partly solve — so RL has non-zero reward signal to bootstrap from:
+that even a weak policy can partly solve, so RL has non-zero reward signal to bootstrap from:
 
 ```python
 gold = gsm8k_gold_answer(ex["answer"])           # the number after '####'
@@ -141,10 +141,10 @@ rows.append({"prompt": ex["question"].strip(), "gold": gold})
 ```
 
 ```bash
-PYTHONPATH=. python scripts/prepare_rl_prompts.py --out_dir /ephemeral/data
+python scripts/prepare_rl_prompts.py --out_dir data
 ```
 
-I cross-checked the emitted gold answers 50/50 against the live GSM8K dataset — they match exactly,
+I cross-checked the emitted gold answers 50/50 against the live GSM8K dataset. They match exactly,
 which matters because the verifier reward ([08_evaluation.md](08_evaluation.md)) is only as trustworthy
 as the gold it compares against.
 
@@ -159,4 +159,4 @@ as the gold it compares against.
 | `arithmetic_prompts.jsonl` | `{prompt, gold}` | GRPO curriculum warm-up |
 <br>
 
-➡️ Next: [Stage 1 — Pretraining](02_pretraining.md).
+➡️ Next: [Stage 1: Pretraining](02_pretraining.md).

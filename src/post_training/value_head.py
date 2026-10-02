@@ -13,7 +13,7 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 
-from src.models.transformer import Transformer
+from src.models.factory import LanguageModel
 
 
 class TransformerWithValueHead(nn.Module):
@@ -23,19 +23,15 @@ class TransformerWithValueHead(nn.Module):
     (B, T, vocab) and ``values`` are per-token value estimates (B, T).
     """
 
-    def __init__(self, transformer: Transformer) -> None:
+    def __init__(self, transformer: LanguageModel) -> None:
         super().__init__()
         self.transformer = transformer
         n_embed = transformer.lm_head.in_features
-        self.value_head = nn.Sequential(
-            nn.Linear(n_embed, n_embed),
-            nn.ReLU(),
-            nn.Linear(n_embed, 1),
-        )
+        hidden, out = nn.Linear(n_embed, n_embed), nn.Linear(n_embed, 1)
         # Start with values ~0 so the critic does not destabilize the policy early on.
-        last = self.value_head[-1]
-        nn.init.zeros_(last.weight)
-        nn.init.zeros_(last.bias)
+        nn.init.zeros_(out.weight)
+        nn.init.zeros_(out.bias)
+        self.value_head = nn.Sequential(hidden, nn.ReLU(), out)
 
     # Expose the backbone's context length so rollout's cap detection works.
     @property

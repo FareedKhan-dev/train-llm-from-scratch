@@ -63,11 +63,13 @@ syntax, facts, formats, style, and reasoning traces into its weights.
 Read in this order:
 
 1. [Tokenization & Data Shapes](tokenization.md) - how text becomes batches.
-2. [Decoder-Only Transformer](transformer.md) - the model skeleton.
-3. [Attention, Masks & Heads](attention.md) - the core operation.
-4. [Objectives, Losses & Perplexity](objectives.md) - what the model is optimized to do.
-5. [Optimization & Training Systems](optimization.md) - how the loop stays stable.
-6. [Generation & Sampling](generation.md) - how logits become text.
+2. [BPE From Scratch](bpe.md) - how a tokenizer is trained.
+3. [Decoder-Only Transformer](transformer.md) - the model skeleton.
+4. [Attention, Masks & Heads](attention.md) - the core operation.
+5. [Objectives, Losses & Perplexity](objectives.md) - what the model is optimized to do.
+6. [Optimization & Training Systems](optimization.md) - how the loop stays stable.
+7. [Generation & Sampling](generation.md) - how logits become text.
+8. [Scaling, FLOPs & Memory](scaling.md) - how big, how long, and will it fit.
 
 Then continue to the pipeline pages:
 

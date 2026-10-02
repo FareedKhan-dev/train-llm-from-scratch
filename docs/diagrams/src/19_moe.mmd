@@ -1,0 +1,18 @@
+%%{init: {'look':'handDrawn','theme':'base','themeVariables':{'fontFamily':'Comic Sans MS, cursive'}}}%%
+flowchart LR
+    T([token vector x]):::data --> R{router<br/>softmax over experts}:::rl
+    R -->|top-k = 2| E1{{expert 3}}:::model
+    R -->|top-k = 2| E2{{expert 7}}:::model
+    R -. not chosen .-> E0[experts 1, 2, 4, 5, 6, 8<br/>idle for this token]:::ckpt
+    T --> SH{{shared expert<br/>every token}}:::model
+    E1 -->|weight p3| SUM((+)):::proc
+    E2 -->|weight p7| SUM
+    SH --> SUM
+    SUM --> Y([output]):::data
+    R -. how evenly were tokens spread? .-> AUX[load-balancing loss<br/>E x sum of f_e x P_e]:::loss
+    classDef data fill:#d6ffd9,stroke:#27ae60,stroke-width:2px,color:#143d1a;
+    classDef proc fill:#d6e8ff,stroke:#2c6fbb,stroke-width:2px,color:#0d2c52;
+    classDef model fill:#ffe8a3,stroke:#d48806,stroke-width:2px,color:#5a3d00;
+    classDef rl fill:#ffd9b3,stroke:#e67e22,stroke-width:2px,color:#6b3500;
+    classDef loss fill:#ffd6d6,stroke:#c0392b,stroke-width:2px,color:#5c1212;
+    classDef ckpt fill:#eeeeee,stroke:#555,stroke-width:2px,color:#222;

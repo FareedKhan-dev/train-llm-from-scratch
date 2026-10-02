@@ -14,7 +14,10 @@ from __future__ import annotations
 import re
 
 from src.post_training.chat_template import (
-    ANSWER_OPEN, ANSWER_CLOSE, THINK_OPEN, THINK_CLOSE,
+    ANSWER_CLOSE,
+    ANSWER_OPEN,
+    THINK_CLOSE,
+    THINK_OPEN,
 )
 
 # A number: optional sign, digits with optional thousands commas, optional decimal.

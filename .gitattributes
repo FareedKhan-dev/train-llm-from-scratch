@@ -1,0 +1,12 @@
+# Normalize text files to LF in the repository on every platform.
+* text=auto
+
+# Shell scripts must keep LF line endings or bash refuses to run them.
+*.sh text eol=lf
+
+# Binary assets
+*.png binary
+*.jpg binary
+*.pdf binary
+*.h5 binary
+*.pt binary

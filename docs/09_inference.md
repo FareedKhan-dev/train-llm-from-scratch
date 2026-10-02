@@ -1,9 +1,9 @@
 <!-- omit in toc -->
 # Inference & Chat
 
-Training is only satisfying if you can actually *talk* to the result. The original
-[`generate_text.py`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/scripts/generate_text.py) does raw continuation for the base model, but it's
-hard-wired to the legacy config and has no chat template — so I added a small inference layer that loads
+Training is only satisfying if you can actually *talk* to the result.
+[`generate_text.py`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/scripts/generate_text.py) continues text with the models from `train_transformer.py`, but it
+has no chat template, so I added a small inference layer that loads
 **any** stage checkpoint (base / SFT / DPO / PPO / GRPO) and talks to it correctly.
 
 For the underlying decoding loop, context cropping, temperature, and stop-token behavior, read
@@ -46,12 +46,12 @@ state = {k.removeprefix("module.").removeprefix("transformer."): v for k, v in s
 
 ## Chat vs raw
 
-[`generate_reply`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/inference.py#L37) has two modes, reusing the same tested
+[`generate_reply`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/inference.py#L44) has two modes, reusing the same tested
 generation core as training/eval ([`batched_generate`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/evaluation.py#L24)):
 
-- **chat** (default) — wraps your text in the chat template (optionally with a `system` message) and
+- **chat** (default): wraps your text in the chat template (optionally with a `system` message) and
   returns the decoded assistant turn. Use this for SFT/DPO/PPO/GRPO checkpoints.
-- **raw** (`--raw`) — treats your text as a prefix and returns the base model's continuation (no
+- **raw** (`--raw`): treats your text as a prefix and returns the base model's continuation (no
   template). Use this for `base_pretrained.pt`.
 
 ```python
@@ -63,7 +63,7 @@ out = batched_generate(model, [ids], max_new_tokens, device=device,
                        temperature=temperature, top_k=top_k, top_p=top_p, greedy=greedy)
 ```
 
-Decoding is defensive — [`decode`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/chat_template.py) drops the EOT terminator and
+Decoding is defensive: [`decode`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/chat_template.py) drops the EOT terminator and
 any padding-vocab ids (the model's vocab is padded to 50304 but r50k_base only decodes 0–50255).
 
 ## The CLI
@@ -72,21 +72,26 @@ any padding-vocab ids (the model's vocab is padded to 50304 but r50k_base only d
 
 ```bash
 # instruction-tuned models (chat template applied automatically)
-PYTHONPATH=. python scripts/chat.py --ckpt /ephemeral/ckpts/sft.pt  --prompt "What is 13 + 29?"
-PYTHONPATH=. python scripts/chat.py --ckpt /ephemeral/ckpts/grpo.pt --prompt "..." --greedy
+python scripts/chat.py --ckpt models/sft.pt  --prompt "What is 13 + 29?"
+python scripts/chat.py --ckpt models/grpo.pt --prompt "..." --greedy
 # base-model continuation
-PYTHONPATH=. python scripts/chat.py --ckpt /ephemeral/ckpts/base_pretrained.pt --raw --prompt "Once upon a time"
+python scripts/chat.py --ckpt models/base_pretrained.pt --raw --prompt "Once upon a time"
 # interactive REPL (omit --prompt)
-PYTHONPATH=. python scripts/chat.py --ckpt /ephemeral/ckpts/sft.pt
+python scripts/chat.py --ckpt models/sft.pt
 ```
 
-Sampling controls: `--temperature`, `--top_p`, `--top_k`, or `--greedy` for deterministic argmax. Runs
-on `--device cuda` or `cpu` (both verified).
+Sampling controls: `--temperature`, `--top_p`, `--top_k`, or `--greedy` for deterministic argmax.
+`--device` defaults to `auto` (CUDA, then Apple MPS, then the CPU), and `--int8` stores the linear
+layers' weights as int8, which takes about a quarter of their memory. Modern-architecture
+checkpoints generate with a KV cache, so each new token costs one short forward pass.
 
 ## Sampling knobs, briefly
 
-- **greedy** — reproducible, best for eval / math (`--greedy`).
-- **temperature** — higher = more random; ~`0.7–1.0` for open-ended chat.
-- **top_p / top_k** — nucleus / top-k truncation to cut the long tail of unlikely tokens.
+- **greedy**: reproducible, best for eval / math (`--greedy`).
+- **temperature**: higher = more random; ~`0.7–1.0` for open-ended chat.
+- **top_p / top_k**: nucleus / top-k truncation to cut the long tail of unlikely tokens.
+
+[Inference](modern/inference.md) in the Modern LLM section goes further: min-p sampling, how
+the KV cache works, speculative decoding and int8 weights, with measurements.
 
 That's the full loop: pretrain → align → reason → measure → chat. Back to the [overview](README.md).

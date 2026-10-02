@@ -1,0 +1,60 @@
+"""The original (classic) Transformer: shapes, causality, forward_embedding and generate()."""
+
+from __future__ import annotations
+
+import torch
+
+from src.models.transformer import Transformer
+
+
+def _model(n_blocks: int = 3) -> Transformer:
+    torch.manual_seed(0)
+    return Transformer(n_head=4, n_embed=32, context_length=16, vocab_size=50, N_BLOCKS=n_blocks).eval()
+
+
+def test_forward_shapes_loss_and_causality() -> None:
+    model = _model()
+    idx = torch.randint(0, 50, (2, 12))
+    logits, loss = model(idx, idx)
+    assert logits.shape == (2, 12, 50) and loss is not None
+    changed = idx.clone()
+    changed[:, 8] = (changed[:, 8] + 1) % 50
+    with torch.no_grad():
+        assert torch.allclose(model(changed)[0][:, :8], logits[:, :8], atol=1e-5)
+
+
+def test_forward_embedding_works_with_several_blocks() -> None:
+    """Regression: it used to feed 4x-wide MLP activations into the next block and crash."""
+    model = _model(n_blocks=3)
+    idx = torch.randint(0, 50, (2, 10))
+    hidden, residual = model.forward_embedding(idx)
+    assert hidden.shape == (2, 10, 4 * 32) and residual.shape == (2, 10, 32)
+    # the residual is the last block's stream after attention, before its MLP
+    with torch.no_grad():
+        x = model._pre_attn_pass(idx)
+        for block in model.attn_blocks[:-1]:
+            x = block(x)
+        last = model.attn_blocks[-1]
+        expected = x + last.attn(last.ln1(x))
+    assert torch.allclose(residual, expected, atol=1e-6)
+
+
+def test_generate_options() -> None:
+    model = _model()
+    prompt = torch.randint(0, 50, (2, 3))
+    out = model.generate(prompt, max_new_tokens=20)
+    assert out.shape == (2, 23) and torch.equal(out[:, :3], prompt)
+    greedy_a = model.generate(prompt, 10, top_k=1)
+    greedy_b = model.generate(prompt, 10, top_k=1)
+    assert torch.equal(greedy_a, greedy_b)  # top_k=1 is deterministic
+    # a short window must give the same greedy result as cropping by hand
+    windowed = model.generate(prompt, 10, top_k=1, context_window=4)
+    manual = prompt
+    for _ in range(10):
+        logits, _ = model(manual[:, -4:])
+        manual = torch.cat([manual, logits[:, -1].argmax(-1, keepdim=True)], dim=1)
+    assert torch.equal(windowed, manual)
+    assert not torch.is_grad_enabled() or out.requires_grad is False
+    # min-p close to 1 keeps only the top token, and a tiny top-p does the same: both are greedy
+    assert torch.equal(model.generate(prompt, 10, min_p=0.999), greedy_a)
+    assert torch.equal(model.generate(prompt, 10, top_p=1e-6), greedy_a)

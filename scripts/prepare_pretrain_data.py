@@ -4,15 +4,15 @@ pretraining. Faster than the original ``data_preprocess.py`` (which resizes the 
 document): here we stream-decompress, batch-tokenize with tiktoken, and write tokens to
 the HDF5 in large chunks.
 
-Writes to /ephemeral by default (the 1.5TB disk).
+Writes under data/ by default (pass --out / --raw_dir to use another disk).
 
 Examples:
     # dev split from the Pile validation file
-    PYTHONPATH=. python scripts/prepare_pretrain_data.py --split val \
-        --out /ephemeral/data/pile_dev.h5
+    python scripts/prepare_pretrain_data.py --split val \
+        --out data/pile_dev.h5
     # one training shard
-    PYTHONPATH=. python scripts/prepare_pretrain_data.py --split train --num_shards 1 \
-        --out /ephemeral/data/pile_train.h5
+    python scripts/prepare_pretrain_data.py --split train --num_shards 1 \
+        --out data/pile_train.h5
 """
 
 from __future__ import annotations
@@ -122,7 +122,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--split", choices=["train", "val"], required=True)
     p.add_argument("--num_shards", type=int, default=1, help="train shards to use")
-    p.add_argument("--raw_dir", default="/ephemeral/data/pile_raw")
+    p.add_argument("--raw_dir", default="data/pile_raw")
     p.add_argument("--out", required=True)
     p.add_argument("--max_tokens", type=int, default=None, help="stop after this many tokens")
     args = p.parse_args()

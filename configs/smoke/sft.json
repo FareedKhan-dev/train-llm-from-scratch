@@ -1,4 +1,6 @@
 {
+  "pretrained_ckpt": "models/smoke/base_pretrained.pt",
+  "out_ckpt": "models/smoke/sft.pt",
   "max_steps": 10,
   "batch_size": 4,
   "eval_steps": 10000,

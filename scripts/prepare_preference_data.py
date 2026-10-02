@@ -7,17 +7,20 @@ Emits JSONL of ``{"prompt", "chosen", "rejected"}`` (train + held-out test). The
 test split is what reward-model preference accuracy is measured on.
 
 Example:
-    PYTHONPATH=. HF_HOME=/ephemeral/hf_cache python scripts/prepare_preference_data.py \
-        --source both --max_per_source 40000 --out_dir /ephemeral/data
+    python scripts/prepare_preference_data.py \
+        --source both --max_per_source 40000 --out_dir data
 """
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # run from the repo without installing
+
 import argparse
 import json
 import os
-
-os.environ.setdefault("HF_HOME", "/ephemeral/hf_cache")
 
 _ASSISTANT_MARKER = "\n\nAssistant:"
 
@@ -97,7 +100,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--source", choices=["hh", "ultrafeedback", "both"], default="both")
     p.add_argument("--max_per_source", type=int, default=40000)
-    p.add_argument("--out_dir", default="/ephemeral/data")
+    p.add_argument("--out_dir", default="data")
     args = p.parse_args()
 
     train = collect(args.source, args.max_per_source, "train")

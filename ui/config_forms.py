@@ -2,7 +2,7 @@
 Render an editable config form from a stage's dataclass fields and write it back to JSON.
 
 Base/runtime fields (shared) are saved to ``base.json``; the stage's own hyperparameters to
-``configs/<stage>.json`` — matching the loader's merge model. Shows the exact resolved
+``configs/<stage>.json``, matching the loader's merge model. Shows the exact resolved
 launch command underneath.
 """
 

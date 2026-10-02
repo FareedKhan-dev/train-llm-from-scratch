@@ -1,0 +1,14 @@
+%%{init: {'look':'handDrawn','theme':'base','themeVariables':{'fontFamily':'Comic Sans MS, cursive'}}}%%
+flowchart LR
+    P([prompt: T tokens]):::data --> PF{{prefill<br/>one pass over the prompt}}:::model
+    PF -->|store k, v of every layer| C[(KV cache<br/>T tokens)]:::ckpt
+    PF --> S1[sample token T+1]:::rl
+    S1 --> D{{decode<br/>run ONLY the new token}}:::model
+    C -->|attend to the cached k, v| D
+    D -->|append its k, v| C
+    D --> S2[sample the next token]:::rl
+    S2 -->|repeat| D
+    classDef data fill:#d6ffd9,stroke:#27ae60,stroke-width:2px,color:#143d1a;
+    classDef model fill:#ffe8a3,stroke:#d48806,stroke-width:2px,color:#5a3d00;
+    classDef rl fill:#ffd9b3,stroke:#e67e22,stroke-width:2px,color:#6b3500;
+    classDef ckpt fill:#eeeeee,stroke:#555,stroke-width:2px,color:#222;

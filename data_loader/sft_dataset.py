@@ -8,7 +8,7 @@ The HDF5 file has two aligned datasets, ``tokens`` and ``loss_mask``, both shape
 
 from __future__ import annotations
 
-from typing import Iterator
+from collections.abc import Iterator
 
 import h5py
 import numpy as np

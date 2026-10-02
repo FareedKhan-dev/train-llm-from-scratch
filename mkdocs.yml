@@ -1,5 +1,5 @@
 site_name: Train LLM From Scratch
-site_description: From pretraining to RLHF/GRPO — every algorithm hand-written in pure PyTorch.
+site_description: From pretraining to RLHF and GRPO, every algorithm hand-written in pure PyTorch, on a GPU or a laptop CPU.
 site_url: https://FareedKhan-dev.github.io/train-llm-from-scratch/
 repo_url: https://github.com/FareedKhan-dev/train-llm-from-scratch
 repo_name: FareedKhan-dev/train-llm-from-scratch
@@ -7,9 +7,10 @@ docs_dir: docs
 # Files present under docs/ but intentionally not page nodes in the nav.
 not_in_nav: |
   /diagrams/README.md
-# Keep the raw mermaid sources out of the built site.
+# Keep the raw mermaid sources and the plotting script out of the built site.
 exclude_docs: |
   /diagrams/src/
+  /diagrams/*.py
 
 theme:
   name: material
@@ -69,14 +70,17 @@ extra_javascript:
 
 nav:
   - Home: README.md
+  - Laptop Track: student/README.md
   - Foundations:
       - Overview: foundations/README.md
       - Tokenization & Data Shapes: foundations/tokenization.md
+      - BPE From Scratch: foundations/bpe.md
       - Decoder-Only Transformer: foundations/transformer.md
       - Attention, Masks & Heads: foundations/attention.md
       - Objectives, Losses & Perplexity: foundations/objectives.md
       - Optimization & Training Systems: foundations/optimization.md
       - Generation & Sampling: foundations/generation.md
+      - Scaling, FLOPs & Memory: foundations/scaling.md
   - Theory & Pipeline:
       - Data handling: 01_data_pipeline.md
       - Pretraining: 02_pretraining.md
@@ -85,9 +89,22 @@ nav:
       - DPO / ORPO / KTO: 05_dpo.md
       - PPO: 06_ppo.md
       - GRPO / RLVR: 07_grpo.md
+  - Modern LLM:
+      - Overview: modern/README.md
+      - RMSNorm, SwiGLU & Init: modern/blocks.md
+      - Rotary Embeddings: modern/rope.md
+      - GQA, MLA & the KV Cache: modern/attention.md
+      - Mixture of Experts: modern/moe.md
+      - AdamW, Muon & Schedules: modern/optimizers.md
+      - DPO, IPO, SimPO, ORPO, KTO: modern/preference.md
+      - GRPO, Dr. GRPO, DAPO, GSPO: modern/rl_reasoning.md
+      - LoRA: modern/lora.md
+      - Fast Inference: modern/inference.md
   - How-to:
       - Configure (JSON): howto/configs.md
       - Train (UI & CLI): howto/train.md
+      - Hardware (CPU, GPU, Mac, TPU): howto/hardware.md
+      - Type Safety: howto/type_safety.md
       - The control-panel UI: howto/ui.md
       - Evaluate: 08_evaluation.md
       - Inference / Chat: 09_inference.md

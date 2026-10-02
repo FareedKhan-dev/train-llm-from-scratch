@@ -3,18 +3,23 @@ Build the SFT dataset from real public instruction data + GSM8K, render it throu
 chat template (masking prompt tokens), pack to fixed-length rows, and write a packed
 HDF5 (``tokens`` + ``loss_mask``) plus a held-out dev file.
 
-Datasets (downloaded via HuggingFace ``datasets`` to /ephemeral/hf_cache):
+Datasets (downloaded with the HuggingFace ``datasets`` library; set HF_HOME to move its cache):
   - tatsu-lab/alpaca                (general instruction following)
   - databricks/databricks-dolly-15k (general instruction following)
   - openai/gsm8k (main, train)      (math, reformatted into <think>/<answer> so the model
                                      learns the reasoning format the RL verifier rewards)
 
 Example:
-    PYTHONPATH=. HF_HOME=/ephemeral/hf_cache python scripts/prepare_sft_data.py \
-        --context_length 1024 --out_dir /ephemeral/data
+    python scripts/prepare_sft_data.py \
+        --context_length 1024 --out_dir data
 """
 
 from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # run from the repo without installing
 
 import argparse
 import os
@@ -23,10 +28,9 @@ import re
 import h5py
 import numpy as np
 
-from src.post_training.chat_template import encode_chat, ANSWER_OPEN, ANSWER_CLOSE, THINK_OPEN, THINK_CLOSE
+from src.post_training.chat_template import ANSWER_CLOSE, ANSWER_OPEN, THINK_CLOSE, THINK_OPEN, encode_chat
 from src.post_training.sft import pack_examples
 
-os.environ.setdefault("HF_HOME", "/ephemeral/hf_cache")
 _CALC_RE = re.compile(r"<<[^>]*>>")          # GSM8K calculator annotations
 _HASH_RE = re.compile(r"####\s*(.+)\s*$")
 
@@ -107,7 +111,7 @@ def write_packed(examples, context_length: int, out_path: str) -> int:
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--context_length", type=int, default=1024)
-    p.add_argument("--out_dir", default="/ephemeral/data")
+    p.add_argument("--out_dir", default="data")
     p.add_argument("--dev_frac", type=float, default=0.02)
     p.add_argument("--limit_per_set", type=int, default=None, help="cap examples per dataset (debug)")
     p.add_argument("--seed", type=int, default=42)

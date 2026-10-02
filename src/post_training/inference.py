@@ -11,25 +11,32 @@ from __future__ import annotations
 
 import torch
 
-from src.models.transformer import Transformer
-from src.post_training.chat_template import EOT_ID, decode, encode_prompt, get_tokenizer
+from src.checkpoint import (
+    load_checkpoint,
+    load_model_weights,
+    model_config_from_checkpoint,
+    model_state_from_checkpoint,
+)
+from src.models.factory import LanguageModel, build_model
+from src.post_training.chat_template import encode_prompt, get_tokenizer
 from src.post_training.evaluation import batched_generate
 
 
-def load_model_from_ckpt(ckpt_path: str, device: str, overrides: dict | None = None) -> Transformer:
-    """Build a :class:`Transformer` from a checkpoint's stored cfg and load its backbone
-    weights (tolerates ``module.``/``transformer.`` prefixes and reward-head extras)."""
-    ck = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-    cfg = {**(ck.get("cfg") or {}), **(overrides or {})}
-    model = Transformer(
-        n_head=cfg.get("n_head", 16), n_embed=cfg.get("n_embed", 1024),
-        context_length=cfg.get("context_length", 1024), vocab_size=cfg.get("vocab_size", 50304),
-        N_BLOCKS=cfg.get("n_blocks", 24),
-    )
-    state = ck["model_state_dict"] if "model_state_dict" in ck else ck
-    state = {k.removeprefix("module.").removeprefix("transformer."): v for k, v in state.items()}
-    keys = set(model.state_dict().keys())
-    model.load_state_dict({k: v for k, v in state.items() if k in keys}, strict=False)
+def load_model_from_ckpt(ckpt_path: str, device: str, overrides: dict | None = None) -> LanguageModel:
+    """
+    Build a model from the settings stored in a checkpoint and load its weights.
+
+    Works for every checkpoint in the repo: the legacy trainer (settings under ``config``),
+    every post-training stage (settings under ``cfg``), and reward-model checkpoints, whose
+    backbone keys start with ``transformer.``. DDP and torch.compile prefixes are stripped
+    too, so a model trained with ``--compile true`` loads correctly (issue #36).
+    """
+    ck = load_checkpoint(ckpt_path, map_location="cpu")
+    defaults = {"n_head": 16, "n_embed": 1024, "context_length": 1024, "vocab_size": 50304, "n_blocks": 24}
+    cfg = {**defaults, **model_config_from_checkpoint(ck), **(overrides or {})}
+    model = build_model(cfg)
+    state = model_state_from_checkpoint(ck, extra_prefixes=("transformer.",))
+    load_model_weights(model, state, source=ckpt_path)
     return model.to(device).eval()
 
 

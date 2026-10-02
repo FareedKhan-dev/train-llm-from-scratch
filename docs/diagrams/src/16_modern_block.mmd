@@ -1,0 +1,20 @@
+%%{init: {'look':'handDrawn','theme':'base','themeVariables':{'fontFamily':'Comic Sans MS, cursive'}}}%%
+flowchart LR
+    X[(residual stream x)]:::store --> N1[RMSNorm]:::proc
+    N1 --> QKV[q, k, v projections<br/>fewer k, v heads: GQA]:::proc
+    QKV --> QK[QK-norm + RoPE<br/>rotate q and k by position]:::rl
+    QK --> SDPA{{scaled_dot_product_attention<br/>causal or sliding window}}:::model
+    KV[(KV cache<br/>during generation)]:::ckpt -. past keys and values .-> SDPA
+    SDPA --> O[output projection]:::proc
+    O --> A1((+)):::proc
+    X --> A1
+    A1 --> N2[RMSNorm]:::proc
+    N2 --> MLP{{SwiGLU<br/>or Mixture of Experts}}:::model
+    MLP --> A2((+)):::proc
+    A1 --> A2
+    A2 --> OUT[(next block)]:::store
+    classDef proc fill:#d6e8ff,stroke:#2c6fbb,stroke-width:2px,color:#0d2c52;
+    classDef store fill:#cdece8,stroke:#16a085,stroke-width:2px,color:#0a3d33;
+    classDef model fill:#ffe8a3,stroke:#d48806,stroke-width:2px,color:#5a3d00;
+    classDef rl fill:#ffd9b3,stroke:#e67e22,stroke-width:2px,color:#6b3500;
+    classDef ckpt fill:#eeeeee,stroke:#555,stroke-width:2px,color:#222;

@@ -9,14 +9,21 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+from config import paths
 from config.post_training_config import (
-    PretrainConfig, SFTConfig, RewardConfig, DPOConfig, PPOConfig, GRPOConfig,
+    DPOConfig,
+    GRPOConfig,
+    PPOConfig,
+    PretrainConfig,
+    RewardConfig,
+    SFTConfig,
 )
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CKPT_DIR = "/ephemeral/ckpts"
-DATA_DIR = "/ephemeral/data"
-LOG_DIR = "/ephemeral/logs"
+# Absolute versions of data/, models/ and logs/, so the pages work from any working directory.
+CKPT_DIR = os.path.join(REPO_ROOT, paths.CKPT_DIR)
+DATA_DIR = os.path.join(REPO_ROOT, paths.DATA_DIR)
+LOG_DIR = os.path.join(REPO_ROOT, paths.LOG_DIR)
 
 
 @dataclass(frozen=True)

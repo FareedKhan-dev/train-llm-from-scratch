@@ -1,17 +1,61 @@
-import torch
-import tiktoken
+"""
+Generate text with a model trained by scripts/train_transformer.py.
+
+Everything the model needs is read from the checkpoint: its size, its architecture
+(classic or modern), its tokenizer (r50k_base or the BPE trained by prepare_tiny_data.py),
+and the window it was trained on. So you only pass the checkpoint path:
+
+    python scripts/generate_text.py --model_path models/tiny.pt
+    python scripts/generate_text.py --model_path models/student.pt --input_text "The little dog" \
+        --max_new_tokens 200 --temperature 0.7 --top_k 40 --num_samples 3
+    python scripts/generate_text.py --model_path models/tiny.pt --top_k 0 --min_p 0.05   # min-p sampling
+    python scripts/generate_text.py --model_path models/tiny.pt --int8   # int8 linear weights
+    python scripts/generate_text.py --model_path models/student.pt --draft_model models/tiny.pt
+        # speculative decoding: the tiny model guesses, the student model checks
+
+Very old checkpoints that stored only the weights fall back to the sizes in config/config.py.
+"""
+
+from __future__ import annotations
+
 import argparse
-from config.config import default_config as config
-from src.models.transformer import Transformer  # Assuming your Transformer class is in this module
+import sys
+from pathlib import Path
+
+import torch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # run from the repo without installing
+
+from config.config import default_config as config  # noqa: E402
+from src.checkpoint import (  # noqa: E402
+    load_checkpoint,
+    load_model_weights,
+    model_config_from_checkpoint,
+    model_state_from_checkpoint,
+)
+from src.device import resolve_device  # noqa: E402
+from src.inference.quantize import Int8Linear, quantize_int8  # noqa: E402
+from src.inference.speculative import speculative_generate  # noqa: E402
+from src.models.factory import build_model  # noqa: E402
+from src.tokenizer import safe_decode, tokenizer_from_spec, tokenizer_spec  # noqa: E402
 
 
-def load_checkpoint(model_path: str, device: str):
-    try:
-        return torch.load(model_path, map_location=torch.device(device), weights_only=False)
-    except TypeError:
-        return torch.load(model_path, map_location=torch.device(device))
+def load_trained_model(model_path: str, device: str):
+    """Rebuild the model, its tokenizer and its training window from a checkpoint."""
+    checkpoint = load_checkpoint(model_path, map_location="cpu")
+    model_cfg = {**config, **model_config_from_checkpoint(checkpoint)}
+    model = build_model(model_cfg)
+    load_model_weights(model, model_state_from_checkpoint(checkpoint), source=model_path)
+    tokenizer = tokenizer_from_spec(model_cfg.get("tokenizer"))
+    # The legacy trainer may train on windows shorter than the model's context (t_context_length).
+    # Positions it never saw have untrained embeddings, so generation stays inside that window.
+    window = min(model_cfg.get("t_context_length") or model_cfg["context_length"], model_cfg["context_length"])
+    return model.to(device).eval(), tokenizer, window, model_cfg
 
-def generate_text(model_path: str, input_text: str, max_new_tokens: int = 100, device: str = 'cuda') -> str:
+
+def generate_text(model_path: str, input_text: str, max_new_tokens: int = 100, device: str = "auto",
+                  temperature: float = 0.8, top_k: int | None = 50, top_p: float | None = None,
+                  min_p: float | None = None) -> str:
     """
     Generates text using a pre-trained Transformer model.
 
@@ -19,50 +63,81 @@ def generate_text(model_path: str, input_text: str, max_new_tokens: int = 100, d
         model_path (str): Path to the saved model checkpoint.
         input_text (str): The initial text to start generation from.
         max_new_tokens (int): The maximum number of new tokens to generate.
-        device (str): 'cuda' or 'cpu', the device to run the model on.
+        device (str): "auto", "cuda", "mps" or "cpu".
+        temperature (float): Below 1 is safer and more repetitive, above 1 more random.
+        top_k (int, optional): Sample only from the k most likely next tokens.
+        top_p (float, optional): Sample from the most likely tokens that add up to this probability.
+        min_p (float, optional): Drop tokens less than min_p times as likely as the top token.
 
     Returns:
-        str: The generated text.
+        str: The prompt followed by the generated continuation.
     """
-    # Load the model checkpoint
-    checkpoint = load_checkpoint(model_path, device)
-
-    # Initialize the model using the configuration from config.py
-    model = Transformer(
-        n_head=config['n_head'],
-        n_embed=config['n_embed'],
-        context_length=config['context_length'],
-        vocab_size=config['vocab_size'],
-        N_BLOCKS=config['n_blocks']
-    )
-    model.load_state_dict(checkpoint['model_state_dict'])
-    model.eval().to(device)
-
-    # Load the tokenizer
-    enc = tiktoken.get_encoding("r50k_base")
-
-    start_ids = enc.encode_ordinary(input_text)
-    context = torch.tensor(start_ids, dtype=torch.long, device=device).unsqueeze(0)
-
-    # Generation process
+    device = resolve_device(device)
+    model, tokenizer, window, _ = load_trained_model(model_path, device)
+    start_ids = tokenizer.encode_ordinary(input_text)
+    context = torch.tensor([start_ids], dtype=torch.long, device=device)
     with torch.no_grad():
-        generated_tokens = model.generate(context, max_new_tokens=max_new_tokens)[0].tolist()
+        out = model.generate(context, max_new_tokens=max_new_tokens, temperature=temperature,
+                             top_k=top_k, top_p=top_p, min_p=min_p, context_window=window)
+    return safe_decode(tokenizer, out[0].tolist())
 
-    # Decode the generated tokens
-    output_text = enc.decode(generated_tokens)
-
-    return output_text
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate text using a pre-trained Transformer model.")
-    parser.add_argument('--model_path', type=str, help='Path to the saved model checkpoint.')
-    parser.add_argument('--input_text', type=str, help='The initial text to start generation from.')
-    parser.add_argument('--max_new_tokens', type=int, default=100, help='Maximum number of new tokens to generate.')
-
+    parser.add_argument("--model_path", type=str, required=True, help="Path to the saved model checkpoint.")
+    parser.add_argument("--input_text", type=str, default="Once upon a time", help="The text to continue.")
+    parser.add_argument("--max_new_tokens", type=int, default=100, help="Maximum number of new tokens to generate.")
+    parser.add_argument("--temperature", type=float, default=0.8, help="Sampling temperature.")
+    parser.add_argument("--top_k", type=int, default=50, help="Sample from the k most likely tokens (0 = all).")
+    parser.add_argument("--top_p", type=float, default=None, help="Nucleus sampling: keep tokens up to this total probability.")
+    parser.add_argument("--min_p", type=float, default=None,
+                        help="Keep tokens at least this fraction as likely as the top token, e.g. 0.05.")
+    parser.add_argument("--num_samples", type=int, default=1, help="How many continuations to print.")
+    parser.add_argument("--device", default="auto", help="auto, cuda, mps or cpu.")
+    parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducible samples.")
+    parser.add_argument("--int8", action="store_true", help="Store the linear weights as int8 (about 4x smaller).")
+    parser.add_argument("--draft_model", default=None,
+                        help="A smaller checkpoint with the same tokenizer; turns on speculative decoding.")
+    parser.add_argument("--draft_k", type=int, default=4, help="Tokens the draft model guesses per check.")
     args = parser.parse_args()
 
-    generated = generate_text(args.model_path, args.input_text, args.max_new_tokens, config['device'])
-    print(f"Generated text:\n{generated}")
+    if args.seed is not None:
+        torch.manual_seed(args.seed)
+    device = resolve_device(args.device)
+    model, tokenizer, window, model_cfg = load_trained_model(args.model_path, device)
+    if args.int8:
+        model = quantize_int8(model)
+    n_params = sum(p.numel() for p in model.parameters()) + sum(
+        m.weight_int8.numel() for m in model.modules() if isinstance(m, Int8Linear))
+    print(f"Loaded {args.model_path}: {n_params:,} parameters, {model_cfg.get('arch', 'classic')} "
+          f"architecture, window {window} tokens, on {device}")
+
+    draft = None
+    if args.draft_model:
+        draft, draft_tokenizer, draft_window, _ = load_trained_model(args.draft_model, device)
+        if tokenizer_spec(draft_tokenizer) != tokenizer_spec(tokenizer):
+            parser.error("--draft_model must use the same tokenizer as --model_path")
+        if args.int8:
+            draft = quantize_int8(draft)
+        print(f"Draft model {args.draft_model} guesses {args.draft_k} tokens at a time")
+
+    context = torch.tensor([tokenizer.encode_ordinary(args.input_text)], dtype=torch.long, device=device)
+    for i in range(args.num_samples):
+        if draft is None:
+            with torch.no_grad():
+                out = model.generate(context, max_new_tokens=args.max_new_tokens, temperature=args.temperature,
+                                     top_k=args.top_k or None, top_p=args.top_p, min_p=args.min_p,
+                                     context_window=window)
+            stats = ""
+        else:
+            out, spec = speculative_generate(model, draft, context, args.max_new_tokens, k=args.draft_k,
+                                             temperature=args.temperature, top_k=args.top_k or None,
+                                             top_p=args.top_p, min_p=args.min_p,
+                                             target_window=window, draft_window=draft_window)
+            stats = (f" ({spec.acceptance_rate:.0%} of the draft's guesses kept, "
+                     f"{spec.tokens_per_target_call:.2f} tokens per pass of the big model)")
+        print(f"\n--- sample {i + 1}{stats} ---\n{safe_decode(tokenizer, out[0].tolist())}")
+
 
 if __name__ == "__main__":
     main()

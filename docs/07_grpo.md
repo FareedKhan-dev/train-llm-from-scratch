@@ -1,10 +1,10 @@
 <!-- omit in toc -->
-# Stage 6 — GRPO / RLVR (the reasoning frontier)
+# Stage 6: GRPO / RLVR (the reasoning frontier)
 
 GRPO (Group Relative Policy Optimization) is the algorithm behind DeepSeek-R1, and it's beautifully
 simple: **throw away PPO's value network**. For each prompt, sample a whole *group* of answers, score
 them with a verifiable reward, and use the group's own mean/std as the baseline. The advantage is just
-"how much better than your groupmates was this answer?" — no critic to train, no value loss.
+"how much better than your groupmates was this answer?" No critic to train, no value loss.
 
 For the group-relative advantage formula and how it relates to PPO-style policy ratios, see
 [Objectives, Losses & Perplexity](foundations/objectives.md).
@@ -36,7 +36,7 @@ flowchart LR
 
 ## Group-relative advantage
 
-[`group_advantages`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/grpo.py#L17) is the whole idea — standardize rewards *within
+[`group_advantages`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/grpo.py#L47) is the whole idea: standardize rewards *within
 each group*, so a good answer is one that beats its siblings on the same prompt:
 
 ```python
@@ -47,14 +47,14 @@ def group_advantages(rewards, group_size, eps=1e-4):
 ```
 
 A nice property: if every answer in a group gets the same reward (all right or all wrong), the std-based
-advantage is ~0 and that group simply contributes no gradient — so I log the fraction of *informative*
+advantage is ~0 and that group simply contributes no gradient, so I log the fraction of *informative*
 groups as a health metric.
 
 ## The loss: clipped surrogate + KL
 
-[`grpo_loss`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/grpo.py#L37) applies the same PPO-style token-level clipped surrogate
+[`grpo_loss`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/grpo.py#L97) applies the same PPO-style token-level clipped surrogate
 (advantage broadcast across a completion's tokens) plus a per-token KL penalty to the reference, using
-Schulman's non-negative **k3** estimator ([`k3_kl`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/grpo.py#L31)):
+Schulman's non-negative **k3** estimator ([`k3_kl`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/src/post_training/grpo.py#L65)):
 
 ```python
 ratio = torch.exp(new_logp - old_logp)
@@ -77,26 +77,29 @@ rewards = torch.tensor([reward_gsm8k(responses[i], golds[i]) for i in range(len(
 adv = group_advantages(rewards, G)
 ```
 
+The 2025 follow-ups to GRPO (Dr. GRPO, DAPO's clip-higher and dynamic sampling, GSPO's
+sequence-level ratio) are flags on this same trainer; see [RL for reasoning](modern/rl_reasoning.md).
+
 ## Run it
 
 ```bash
-PYTHONPATH=. python scripts/train_grpo.py --group_size 8
-PYTHONPATH=. torchrun --standalone --nproc_per_node=2 scripts/train_grpo.py
+python scripts/train_grpo.py --group_size 8
+torchrun --standalone --nproc_per_node=2 scripts/train_grpo.py
 # tune: --curriculum_iters 100 --kl_coef 0.04 --temperature 1.0
 ```
 
 ## What the numbers mean
 
-- **reward** — mean verifier reward across the group samples; the curve you want climbing.
-- **informative** — fraction of groups with non-zero reward spread (groups that actually teach
+- **reward**: mean verifier reward across the group samples; the curve you want climbing.
+- **informative**: fraction of groups with non-zero reward spread (groups that actually teach
   something). If this collapses to 0, raise temperature / group size or stay longer on the curriculum.
-- **KL** — KL to the reference; keep it bounded.
-- **GSM8K test accuracy** — the headline reasoning metric, evaluated every `--eval_every`.
+- **KL**: KL to the reference; keep it bounded.
+- **GSM8K test accuracy**: the headline reasoning metric, evaluated every `--eval_every`.
 
 > I verified the GRPO path genuinely optimizes: with a learnable reward the mean reward climbed
 > **0.10 → 0.69 → 1.00** in ~15 iterations and saturated. PPO and GRPO share the same rollout/log-prob
 > core, so this also exercises the common machinery.
 
-Saved to `/ephemeral/ckpts/grpo.pt`.
+Saved to `models/grpo.pt`.
 
 ➡️ Next: [measure all stages on GSM8K](08_evaluation.md) and [chat with the result](09_inference.md).

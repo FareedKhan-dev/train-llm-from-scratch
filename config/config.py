@@ -1,6 +1,11 @@
 # --- Configuration ---
+#
+# The plain constants used by scripts/train_transformer.py. The defaults below describe the
+# original ~3B parameter model. For smaller runs, use a named preset instead of editing this
+# file, for example `python scripts/train_transformer.py --preset tiny` on a laptop CPU
+# (all presets are in config/presets.py).
 
-import torch
+from src.device import resolve_device
 
 # Define vocabulary size and transformer configuration (3 Billion)
 VOCAB_SIZE = 50304          # Number of unique tokens in the vocabulary
@@ -35,8 +40,8 @@ USE_GRADIENT_CHECKPOINTING = False  # recompute block activations in backward to
 GRAD_ACCUM_STEPS = 1           # micro-batches per optimizer step (effective batch x N)
 REPORT_MEMORY_BUDGET = False   # print a rough VRAM budget before training (CUDA only)
 
-# Device configuration
-DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+# Device configuration: CUDA if available, then Apple Silicon (MPS), then the CPU
+DEVICE = resolve_device("auto")
 
 # Store all configurations in a dictionary for easy access and modification
 default_config = {

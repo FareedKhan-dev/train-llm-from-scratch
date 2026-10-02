@@ -7,8 +7,8 @@ Run from the repo root:
 
 from __future__ import annotations
 
-import tempfile
 import os
+import tempfile
 from unittest import mock
 
 import torch
@@ -16,10 +16,10 @@ import torch
 from scripts.train_transformer import (
     checkpoint_path,
     list_checkpoints,
+    prune_old_checkpoints,
     resolve_resume_path,
     restore_training_checkpoint,
     save_training_checkpoint,
-    prune_old_checkpoints,
 )
 from src.models.transformer import Transformer
 
@@ -88,7 +88,7 @@ def test_checkpoint_save_failure_does_not_leave_partial_file():
         with mock.patch("scripts.train_transformer.torch.save", side_effect=RuntimeError("boom")):
             try:
                 save_training_checkpoint(target, model, optimizer, cfg, [1.0], step=7)
-                assert False, "save_training_checkpoint should re-raise save errors"
+                raise AssertionError("save_training_checkpoint should re-raise save errors")
             except RuntimeError:
                 pass
 

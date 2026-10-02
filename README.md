@@ -5,15 +5,17 @@
 <!-- omit in toc -->
 # Train LLM From Scratch
 
-![Python](https://img.shields.io/badge/Python-3.9%2B-blue) ![License](https://img.shields.io/badge/License-MIT-green) ![Contributions](https://img.shields.io/badge/Contributions-Welcome-blue) [![Docs](https://img.shields.io/badge/Docs-Available-success)](https://fareedkhan-dev.github.io/train-llm-from-scratch/)
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue) [![CI](https://github.com/FareedKhan-dev/train-llm-from-scratch/actions/workflows/ci.yml/badge.svg)](https://github.com/FareedKhan-dev/train-llm-from-scratch/actions/workflows/ci.yml) ![License](https://img.shields.io/badge/License-MIT-green) ![Contributions](https://img.shields.io/badge/Contributions-Welcome-blue) [![Docs](https://img.shields.io/badge/Docs-Available-success)](https://fareedkhan-dev.github.io/train-llm-from-scratch/)
 
 **I am Looking for a PhD position in AI**. [GitHub](https://github.com/FareedKhan-dev)
 
 </div>
 
-I implemented a transformer model from scratch using PyTorch, based on the paper [Attention is All You Need](https://arxiv.org/abs/1706.03762). You can use my scripts to train your own **billion** or **million** parameter LLM using a single GPU.
+I implemented a transformer model from scratch using PyTorch, based on the paper [Attention is All You Need](https://arxiv.org/abs/1706.03762). You can use my scripts to train your own **billion** or **million** parameter LLM using a single GPU, or a small one on a laptop CPU with no GPU at all.
 
 This started as a pretraining tutorial. It now goes all the way from raw text to an aligned, reasoning style model, with every algorithm hand written in plain PyTorch (no `trl`, no `peft`, no `transformers`). The whole journey is one idea repeated: turn text into numbers, predict the next token, then keep changing the data and the loss until the model does what we want.
+
+Next to the original model there is now a modern one, built the way current open models are (rotary positions, RMSNorm, SwiGLU, grouped-query and latent attention, Mixture of Experts, a KV cache), and every stage can train either. The newer training tricks are here too, each written out by hand: the Muon optimizer, LoRA, IPO and SimPO, Dr. GRPO, DAPO and GSPO, speculative decoding and int8 weights.
 
 ![From raw text to an aligned reasoning model](images/00_pipeline.png)
 
@@ -40,6 +42,7 @@ Odambinais is uncertain and fortune established in rural areas.
 - [Who this is for](#who-this-is-for)
 - [Prerequisites and Training Time](#prerequisites-and-training-time)
 - [Setup](#setup)
+- [No GPU? Train on Your Laptop](#no-gpu-train-on-your-laptop)
 - [Code Structure](#code-structure)
 - [Step 1: Preparing the Data](#step-1-preparing-the-data)
 - [Step 2: The Model, Built From Small Pieces](#step-2-the-model-built-from-small-pieces)
@@ -48,6 +51,7 @@ Odambinais is uncertain and fortune established in rural areas.
   - [Multi Head Attention](#multi-head-attention)
   - [The Transformer Block](#the-transformer-block)
   - [The Full Transformer](#the-full-transformer)
+  - [The Modern Version of the Same Model](#the-modern-version-of-the-same-model)
 - [Step 3: Pretraining the Base Model](#step-3-pretraining-the-base-model)
 - [Step 4: Generating Text](#step-4-generating-text)
 - [Step 5: Post-Training, Turning a Base Model Into an Assistant](#step-5-post-training-turning-a-base-model-into-an-assistant)
@@ -61,6 +65,7 @@ Odambinais is uncertain and fortune established in rural areas.
 - [The Streamlit Control Panel](#the-streamlit-control-panel)
 - [The Documentation Site](#the-documentation-site)
 - [Run the Whole Thing](#run-the-whole-thing)
+- [Type Safety and Tests](#type-safety-and-tests)
 - [What's Next](#whats-next)
 
 ## Who this is for
@@ -92,7 +97,7 @@ You need a basic understanding of object oriented programming, neural networks, 
 | Neural Network      | [Neural Network Video](https://www.youtube.com/watch?v=Jy4wM2X21u0) |
 | Pytorch             | [Pytorch Video](https://www.youtube.com/watch?v=V_xro1bcAuA) |
 
-You will need a GPU to train. A free Colab or Kaggle T4 is enough for the 13 million parameter model, but it will not fit a billion parameter model. Here is a rough guide:
+You do not need a GPU to start: the [laptop track](#no-gpu-train-on-your-laptop) trains a small model on a CPU in minutes. For the bigger models you will need a GPU. A free Colab or Kaggle T4 is enough for the 13 million parameter model, but it will not fit a billion parameter model. Here is a rough guide:
 
 | GPU Name                 | Memory | 2B LLM Training | 13M LLM Training | Max Practical LLM Size (Training) |
 |--------------------------|--------|-----------------|------------------|-----------------------------------|
@@ -117,6 +122,8 @@ cd train-llm-from-scratch
 pip install -e .
 ```
 
+If you use [uv](https://docs.astral.sh/uv/), `uv sync` does the same and also installs the test tools. On a Linux machine without an NVIDIA GPU, install the small CPU build of PyTorch first (`pip install torch --index-url https://download.pytorch.org/whl/cpu`), because the default Linux wheel bundles CUDA.
+
 There are optional extras for the parts you want:
 
 ```bash
@@ -133,6 +140,29 @@ There are two config systems, and it helps to know which is which from the start
 
 For fast checks there is a tiny `configs/smoke/` variant of every stage that shrinks the model so a full run finishes in seconds on a CPU or a single GPU.
 
+## No GPU? Train on Your Laptop
+
+You can train a real (small) language model on a laptop CPU, from raw text to generated stories, in about ten minutes. Three commands:
+
+```bash
+python scripts/prepare_tiny_data.py                              # TinyStories + a BPE tokenizer trained from scratch
+python scripts/train_transformer.py --preset tiny --arch modern  # 369K parameters, about 5 minutes on a CPU
+python scripts/generate_text.py --model_path models/tiny.pt      # write a story
+```
+
+The first command downloads 25 MB of [TinyStories](https://arxiv.org/abs/2305.07759) (short stories written for training tiny models) and trains a 4,096 token BPE tokenizer on it, written from scratch in `src/tokenizer/bpe.py`. A small vocabulary keeps the embedding table small, which is what makes a tiny model fast. Here is what the tiny model wrote after five minutes of training on my laptop:
+
+```
+#### OUTPUT ####
+Once upon a time, there was a little girl named Lily. She liked to eat some food together.
+One day, Lily found a big box in a box. She wanted to pick it up and find it. She thought it
+would make it happy. She looked at her bear and said, "Yes, I will find me. I want to help you get it."
+```
+
+Real words, real sentences, a character and a plot of sorts, from 369 thousand parameters. Bigger presets (`student`, `small`) take longer and write better stories. `scripts/benchmark.py` measures how fast each preset trains on your machine before you commit to a long run, and `scripts/model_report.py` tells you how big a model is, how much compute it needs, and whether it fits in memory.
+
+The full guide, with the presets, the expected losses and experiments to try, is in [docs/student](docs/student/README.md).
+
 ## Code Structure
 
 ```bash
@@ -142,15 +172,25 @@ train-llm-from-scratch/
 │   │   ├── mlp.py               # the feed-forward block
 │   │   ├── attention.py         # single head and multi head attention
 │   │   ├── transformer_block.py # one block: attention + MLP + residuals
-│   │   └── transformer.py       # the full model: embeddings + blocks + lm_head
-│   └── post_training/           # SFT, reward model, PPO, DPO, GRPO, eval, inference
+│   │   ├── transformer.py       # the full model: embeddings + blocks + lm_head
+│   │   ├── modern/              # the modern decoder: RoPE, RMSNorm, SwiGLU, GQA/MLA, MoE, KV cache
+│   │   ├── factory.py           # build_model(cfg): classic or modern from one config
+│   │   └── lora.py              # LoRA adapters, from scratch
+│   ├── optim/                   # Muon, and cosine / WSD / linear learning-rate schedules
+│   ├── tokenizer/               # a byte-level BPE tokenizer, from scratch
+│   ├── inference/               # sampling (top-k, top-p, min-p), speculative decoding, int8
+│   ├── post_training/           # SFT, reward model, PPO, DPO, GRPO, eval, inference
+│   ├── checkpoint.py            # saving and loading checkpoints from any wrapper
+│   └── device.py                # picks CUDA, Apple MPS, CPU (or an experimental TPU)
 ├── config/
 │   ├── config.py                # legacy pretraining config (plain constants)
-│   ├── post_training_config.py  # dataclasses for every post-training stage
-│   └── loader.py                # merges defaults < base.json < stage.json < CLI
+│   ├── presets.py               # named model sizes: tiny, student, small, 13m, 77m, 3b
+│   ├── post_training_config.py  # typed dataclasses for every post-training stage
+│   └── loader.py                # merges defaults < base.json < stage.json < CLI, checks types
 ├── configs/                     # editable JSON, one file per stage (+ smoke/)
 ├── data_loader/                 # batch iterators for each kind of data
 ├── scripts/                     # every runnable step lives here
+├── tests/                       # pytest: models, losses, configs, and every script end to end
 ├── ui/                          # the Streamlit control panel
 ├── docs/                        # the MkDocs site (theory + diagrams)
 ├── images/                      # the diagrams in this README (+ the generator)
@@ -172,7 +212,7 @@ The four streams are:
 
 ### Tokenization
 
-We use the `r50k_base` tokenizer from OpenAI's `tiktoken`, the same one GPT-3 used. Text becomes a list of integers, and we append a special `<|endoftext|>` token (id 50256) at the end of every document so the model learns where one piece of text stops and the next begins.
+We use the `r50k_base` tokenizer from OpenAI's `tiktoken`, the same one GPT-3 used. Text becomes a list of integers, and we append a special `<|endoftext|>` token (id 50256) at the end of every document so the model learns where one piece of text stops and the next begins. (The laptop track trains its own, much smaller tokenizer instead; [BPE from scratch](docs/foundations/bpe.md) shows how.)
 
 ![Tokenization](images/02_tokenization.png)
 
@@ -317,14 +357,14 @@ class Head(nn.Module):
         self.key   = nn.Linear(n_embed, head_size, bias=False)
         self.query = nn.Linear(n_embed, head_size, bias=False)
         self.value = nn.Linear(n_embed, head_size, bias=False)
-        # a lower-triangular matrix used to mask out future positions
-        self.register_buffer('tril', torch.tril(torch.ones(context_length, context_length)))
+        # a lower-triangular matrix used to mask out future positions (rebuilt on load, never saved)
+        self.register_buffer('tril', torch.tril(torch.ones(context_length, context_length)), persistent=False)
 
     def forward(self, x):
         B, T, C = x.shape
         k = self.key(x)
         q = self.query(x)
-        scale_factor = 1 / math.sqrt(C)
+        scale_factor = 1 / math.sqrt(k.size(-1))                       # 1 / sqrt(head_size)
         attn_weights = q @ k.transpose(-2, -1) * scale_factor          # (B, T, T) scores
         attn_weights = attn_weights.masked_fill(self.tril[:T, :T] == 0, float('-inf'))  # no peeking ahead
         attn_weights = F.softmax(attn_weights, dim=-1)
@@ -424,6 +464,22 @@ this tutorial's base (n_embed=512, n_head=8, n_blocks=8):  77,031,552 params
 post-training default (n_embed=1024, n_head=16, n_blocks=24): 406,359,168 params
 ```
 
+### The Modern Version of the Same Model
+
+The model above is the 2017 design in its GPT-2 form, and it is the best one to learn from. Every big open model released since 2023 (Llama, Qwen, Gemma, Mistral, DeepSeek) keeps the same skeleton, a stack of pre-norm residual blocks with attention and an MLP, but swaps almost every part inside the block. `src/models/modern/` implements those swaps, one small file per idea:
+
+| Part | This README's model | The modern model |
+|---|---|---|
+| Positions | a learned table added to the embeddings | rotary embeddings (RoPE) inside attention |
+| Normalization | LayerNorm | RMSNorm |
+| MLP | ReLU | SwiGLU |
+| Keys and values | one per query head | shared by groups of heads (GQA), or a small latent (MLA) |
+| Attention | written out by hand | `F.scaled_dot_product_attention` (FlashAttention on GPUs) |
+| Generation | re-runs the whole text for every token | a KV cache: each new token runs alone |
+| MLP size | dense | optional Mixture of Experts |
+
+Every script takes `--arch modern` (or `"arch": "modern"` in the JSON configs), so the whole pipeline, from pretraining to GRPO, can train either one. On the laptop preset, the modern model reaches a dev loss of 2.78 against 3.30 for the classic one, with 42% fewer parameters. The [modern model docs](docs/modern/README.md) explain each change with the math, the code and the reason it was made.
+
 ## Step 3: Pretraining the Base Model
 
 Pretraining is the long pole. We read random windows of tokens, ask the model to predict the next token at every position, measure how wrong it was with cross-entropy, and nudge the weights. We repeat that a few thousand times.
@@ -446,6 +502,13 @@ then run:
 python scripts/train_transformer.py
 ```
 
+Or skip the editing and use a named preset. The presets are in `config/presets.py`, from `tiny` (a laptop) to `3b` (the original default):
+
+```bash
+python scripts/train_transformer.py --preset 13m
+python scripts/train_transformer.py --preset 77m --arch modern
+```
+
 For long runs you can save periodic checkpoints and resume after an interruption:
 
 ```bash
@@ -466,7 +529,11 @@ The bigger, modern path is `scripts/pretrain_base.py`. It is the same recipe wit
 python scripts/pretrain_base.py
 # both GPUs
 torchrun --standalone --nproc_per_node=2 scripts/pretrain_base.py
+# the modern model, with the Muon optimizer and a warmup-stable-decay schedule
+python scripts/pretrain_base.py --arch modern --optimizer muon --lr_schedule wsd
 ```
+
+[Muon](docs/modern/optimizers.md) updates each weight matrix along the nearest orthogonal matrix of its momentum, computed with five Newton-Schulz iterations instead of an SVD. The WSD schedule keeps the learning rate flat and decays it only at the end, so any checkpoint from the flat part can be finished later.
 
 The core of the loop is small. Each step pulls a batch, runs the forward pass under bf16, scales the loss for gradient accumulation, backpropagates, clips the gradient, and steps the optimizer:
 
@@ -499,7 +566,7 @@ step 1500 | loss 3.6483  | lr 1.45e-04 | 123,781 tok/s
   [eval] step 1500 | train 3.8393 | dev 3.8985
 step 1900 | loss 3.7725  | lr 6.36e-05 | 151,488 tok/s
   [eval] step 1900 | train 3.7345 | dev 3.7607
-Done. Final checkpoint -> /ephemeral/ckpts/base_pretrained.pt
+Done. Final checkpoint -> models/base_pretrained.pt
 ```
 
 ### The loss curve
@@ -531,6 +598,17 @@ Run it from a saved checkpoint:
 ```bash
 python scripts/generate_text.py --model_path models/transformer_B.pt --input_text "The" --max_new_tokens 100
 ```
+
+The real `generate` also takes a temperature and top-k, top-p and min-p filters (`--temperature`, `--top_k`, `--top_p`, `--min_p`), and stays inside the window the model was trained on. Two more tricks are one flag away:
+
+```bash
+# speculative decoding: a small draft model guesses 4 tokens, the big model checks them in one pass
+python scripts/generate_text.py --model_path models/student.pt --draft_model models/tiny.pt
+# int8 weights: the linear layers take a quarter of the memory
+python scripts/generate_text.py --model_path models/student.pt --int8
+```
+
+Speculative decoding gives exactly the big model's output distribution, however bad the draft is; a good draft just means fewer passes of the big model. The [inference docs](docs/modern/inference.md) prove it in three lines and measure both tricks.
 
 The 13 million parameter model already produces real words and roughly correct grammar, which is the encouraging part of starting small.
 
@@ -567,7 +645,7 @@ python scripts/prepare_sft_data.py --context_length 1024
 torchrun --standalone --nproc_per_node=2 scripts/train_sft.py
 ```
 
-The loss code is in `src/post_training/sft.py`, the trainer in `scripts/train_sft.py`.
+The loss code is in `src/post_training/sft.py`, the trainer in `scripts/train_sft.py`. To fine-tune only small low-rank adapters instead of every weight, add `--lora_rank 16` ([LoRA](docs/modern/lora.md), written from scratch in `src/models/lora.py`); the adapters are merged back when the checkpoint is saved.
 
 ### The Reward Model
 
@@ -620,7 +698,7 @@ torchrun --standalone --nproc_per_node=2 scripts/train_dpo.py --loss_type dpo
 #   --loss_type kto    works from an unpaired desirable / undesirable signal
 ```
 
-In this run, DPO reached an implicit-reward accuracy of **0.574** on the held-out pairs (the fraction where the policy prefers the chosen response more than the frozen reference does). All three objectives are in `src/post_training/dpo.py`.
+In this run, DPO reached an implicit-reward accuracy of **0.574** on the held-out pairs (the fraction where the policy prefers the chosen response more than the frozen reference does). The same flag also selects IPO (`ipo`), SimPO (`simpo`, no reference model) and conservative DPO for noisy labels (`--label_smoothing 0.1`). All of them are in `src/post_training/dpo.py`, and [this page](docs/modern/preference.md) compares them.
 
 ### PPO
 
@@ -667,6 +745,16 @@ torchrun --standalone --nproc_per_node=2 scripts/train_grpo.py --group_size 8
 ```
 
 A short arithmetic curriculum runs first, so the model gets some non-zero reward to learn from before it faces full GSM8K. The group-relative advantage, the clipped surrogate, and the k3 KL penalty are in `src/post_training/grpo.py`.
+
+In 2025 several groups found small biases in GRPO's details, and each fix is a flag on the same trainer:
+
+```bash
+python scripts/train_grpo.py --adv_norm none --loss_agg seq-mean-token-sum-norm   # Dr. GRPO
+python scripts/train_grpo.py --clip_high 0.28 --filter_groups true --kl_coef 0    # DAPO
+python scripts/train_grpo.py --ratio_level sequence --clip 0.0003 --clip_high 0.0004   # GSPO
+```
+
+[RL for reasoning](docs/modern/rl_reasoning.md) explains what each one changes and why.
 
 ## Step 6: Evaluation
 
@@ -729,7 +817,7 @@ pip install -e ".[docs]"
 mkdocs serve
 ```
 
-There is also a Foundations section that explains the ideas this code assumes you know (tokenization, the decoder-only Transformer, attention, objectives, optimization, and generation).
+There is also a Foundations section that explains the ideas this code assumes you know (tokenization, the decoder-only Transformer, attention, objectives, optimization, generation, and how to estimate a model's size, compute and memory), a Modern LLM section for everything that changed since the original Transformer, and the laptop track.
 
 ## Run the Whole Thing
 
@@ -747,9 +835,33 @@ python tests/test_post_training_smoke.py                          # core math, o
 python scripts/train_sft.py --config configs/smoke/sft.json       # a real (tiny) training run
 ```
 
+## Type Safety and Tests
+
+Most bugs in training code do not crash. A misspelled config key quietly keeps its default, and a tensor with one extra dimension broadcasts into a bigger one and gives a slightly wrong loss. So the repo checks three things:
+
+- **Configs are typed.** Every stage config is a dataclass with real types, and the loader checks every value from the JSON files and the command line. A typo stops the run with a hint:
+
+  ```
+  train_dpo.py: error: my.json: unknown key 'betta' for DPOConfig (did you mean 'beta'?)
+  ```
+
+- **Tensor shapes are part of the types.** Functions say what they take, for example `Float[Tensor, "batch seq vocab"]` ([jaxtyping](https://github.com/patrick-kidger/jaxtyping)), and the tests check every call at runtime.
+- **mypy and ruff run in CI**, along with the tests on Linux, Windows and macOS. One test trains every stage, pretraining to GRPO, for a few steps on generated data.
+
+```bash
+uv sync            # or: pip install -e . pytest beartype ruff mypy
+uv run pytest      # about 170 tests; add -m "not slow" to skip the end-to-end run
+uv run mypy
+uv run ruff check .
+```
+
+The [type safety guide](docs/howto/type_safety.md) shows a real bug the shape checks catch and plain PyTorch does not, and [CONTRIBUTING.md](CONTRIBUTING.md) explains how to add code that keeps these checks green.
+
 ## What's Next
 
-I recommend you start by training the 13 million parameter model, see it produce sensible words, then scale `n_embed` and `n_blocks` up with the memory flags until you hit your GPU limit. After that, walk the post-training chain one stage at a time and watch the GSM8K number move. Every stage is small enough to read in one sitting, and they all share the same model.
+I recommend you start small. With no GPU, train the `tiny` preset on your laptop and watch it write its first stories. With a GPU, train the 13 million parameter model, see it produce sensible words, then scale `n_embed` and `n_blocks` up with the memory flags until you hit your GPU limit. Then try `--arch modern` on the same data and compare the curves. After that, walk the post-training chain one stage at a time and watch the GSM8K number move. Every stage is small enough to read in one sitting, and they all share the same model.
+
+What changed in each release, and who contributed it, is in [CHANGELOG.md](CHANGELOG.md).
 
 If you want to go deeper on any single stage, the documentation site has a focused page for each one.
 

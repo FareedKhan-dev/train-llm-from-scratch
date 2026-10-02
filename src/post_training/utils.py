@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import contextlib
 import copy
-import os
 import random
 from dataclasses import asdict, is_dataclass
 from typing import Any
@@ -17,7 +16,16 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from src.models.transformer import Transformer
+from src.checkpoint import (
+    atomic_save,
+    load_checkpoint,
+    load_model_weights,
+    model_state_from_checkpoint,
+    strip_wrapper_prefixes,
+    unwrap_model,
+)
+from src.models.factory import LanguageModel, build_model
+from src.models.modern import ModernTransformer
 
 
 def amp_autocast(amp_dtype: str | None, device: str):
@@ -49,51 +57,53 @@ def _cfg_get(cfg: Any, key: str) -> Any:
     return getattr(cfg, key)
 
 
-def build_model_from_config(cfg: Any) -> Transformer:
+def build_model_from_config(cfg: Any) -> LanguageModel:
     """
-    Construct a fresh :class:`Transformer` from a config carrying the standard keys
-    ``n_head, n_embed, context_length, vocab_size, n_blocks``. Works with the new
-    post-training dataclasses and with the legacy ``default_config`` dict.
+    Construct a fresh model from a config carrying the standard keys
+    ``n_head, n_embed, context_length, vocab_size, n_blocks`` (plus ``arch`` and the modern
+    model's settings, when present). Works with the post-training dataclasses and with the
+    legacy ``default_config`` dict.
     """
-    return Transformer(
-        n_head=_cfg_get(cfg, "n_head"),
-        n_embed=_cfg_get(cfg, "n_embed"),
-        context_length=_cfg_get(cfg, "context_length"),
-        vocab_size=_cfg_get(cfg, "vocab_size"),
-        N_BLOCKS=_cfg_get(cfg, "n_blocks"),
-    )
+    return build_model(cfg)
 
 
-def _strip_ddp_prefix(state_dict: dict) -> dict:
-    """Remove a leading ``module.`` from keys saved by DistributedDataParallel."""
-    if any(k.startswith("module.") for k in state_dict):
-        return {k.removeprefix("module."): v for k, v in state_dict.items()}
-    return state_dict
+# Kept for code that imported the old private name; it now also strips torch.compile's
+# ``_orig_mod.`` prefix (issue #36).
+_strip_ddp_prefix = strip_wrapper_prefixes
 
 
-def load_backbone_from_ckpt(cfg: Any, ckpt_path: str, device: str) -> Transformer:
+def load_backbone_from_ckpt(cfg: Any, ckpt_path: str, device: str) -> LanguageModel:
     """
     Build a Transformer from ``cfg`` and load backbone weights from a checkpoint saved
     by the pretraining script or any post-training stage (``model_state_dict`` key).
-    DDP ``module.`` prefixes are stripped. Auxiliary head weights (value/reward), if
-    present, are ignored here -- wrappers add their own fresh heads.
+
+    DDP (``module.``) and torch.compile (``_orig_mod.``) prefixes are stripped. Auxiliary
+    head weights (value/reward), if present, are ignored here because wrappers add their own
+    fresh heads. A checkpoint that does not cover every backbone parameter raises an error
+    instead of silently leaving random weights in place.
     """
     model = build_model_from_config(cfg)
-    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-    state = ckpt["model_state_dict"] if "model_state_dict" in ckpt else ckpt
-    state = _strip_ddp_prefix(state)
-    # Keep only keys that belong to the bare Transformer backbone.
-    backbone_keys = set(model.state_dict().keys())
-    filtered = {k: v for k, v in state.items() if k in backbone_keys}
-    missing, unexpected = model.load_state_dict(filtered, strict=False)
-    if missing:
-        print(f"[load_backbone] {len(missing)} missing keys (e.g. {missing[:3]})")
+    state = model_state_from_checkpoint(load_checkpoint(ckpt_path, map_location="cpu"))
+    load_model_weights(model, state, source=ckpt_path)
     return model.to(device)
 
 
 def unwrap(model: nn.Module) -> nn.Module:
-    """Return the underlying module behind a DDP wrapper (or the model itself)."""
-    return model.module if hasattr(model, "module") else model
+    """Return the plain model behind DDP and torch.compile wrappers (or the model itself)."""
+    return unwrap_model(model)
+
+
+def moe_balance_loss(model: nn.Module) -> torch.Tensor | float:
+    """The Mixture-of-Experts balancing loss of the last forward pass, times its coefficient.
+
+    The modern model adds this loss itself only when it is given targets. The post-training
+    losses are computed outside the model, so the stages add it with this helper. It is 0 for
+    dense models.
+    """
+    inner = unwrap(model)
+    if isinstance(inner, ModernTransformer) and inner.aux_loss is not None:
+        return inner.config.moe_aux_loss_coef * inner.aux_loss
+    return 0.0
 
 
 def make_frozen_copy(model: nn.Module, device: str | None = None) -> nn.Module:
@@ -142,7 +152,7 @@ def gather_last(values: torch.Tensor, seq_lengths: torch.Tensor) -> torch.Tensor
 # --- Checkpoint I/O ----------------------------------------------------------
 
 def _cfg_to_dict(cfg: Any) -> Any:
-    return asdict(cfg) if is_dataclass(cfg) else cfg
+    return asdict(cfg) if is_dataclass(cfg) and not isinstance(cfg, type) else cfg
 
 
 def save_stage_ckpt(
@@ -159,10 +169,9 @@ def save_stage_ckpt(
     """
     Save a checkpoint in the repo's existing shape (``model_state_dict`` /
     ``optimizer_state_dict``) plus post-training metadata (``stage``, ``cfg``, ``step``,
-    ``metrics``). DDP wrappers are unwrapped first so checkpoints load cleanly on a
-    single GPU.
+    ``metrics``). DDP and torch.compile wrappers are unwrapped first so the keys are clean
+    and the file loads into a bare model on any device. The write is atomic.
     """
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     payload = {
         "model_state_dict": unwrap(model).state_dict(),
         "optimizer_state_dict": optimizer.state_dict() if optimizer is not None else None,
@@ -175,4 +184,4 @@ def save_stage_ckpt(
     }
     if extra:
         payload.update(extra)
-    torch.save(payload, path)
+    atomic_save(payload, path)

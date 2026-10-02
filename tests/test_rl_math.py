@@ -6,8 +6,8 @@ Unit tests for the from-scratch RL math (PPO + GRPO). Pure-CPU, runs in millisec
 
 import torch
 
-from src.post_training.ppo import compute_gae, whiten, ppo_policy_loss, ppo_value_loss, approx_kl
 from src.post_training.grpo import group_advantages, grpo_loss, k3_kl
+from src.post_training.ppo import compute_gae, ppo_policy_loss, ppo_value_loss, whiten
 
 
 def test_gae_reward_to_go():

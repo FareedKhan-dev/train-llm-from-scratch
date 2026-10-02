@@ -1,4 +1,7 @@
 {
+  "sft_ckpt": "models/smoke/sft.pt",
+  "reward_ckpt": "models/smoke/reward.pt",
+  "out_ckpt": "models/smoke/ppo.pt",
   "iterations": 2,
   "prompts_per_iter": 4,
   "rollout_len": 32,
