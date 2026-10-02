@@ -65,6 +65,7 @@ Odambinais is uncertain and fortune established in rural areas.
 - [The Streamlit Control Panel](#the-streamlit-control-panel)
 - [The Documentation Site](#the-documentation-site)
 - [Run the Whole Thing](#run-the-whole-thing)
+- [Type Safety and Tests](#type-safety-and-tests)
 - [What's Next](#whats-next)
 
 ## Who this is for
@@ -816,7 +817,7 @@ pip install -e ".[docs]"
 mkdocs serve
 ```
 
-There is also a Foundations section that explains the ideas this code assumes you know (tokenization, the decoder-only Transformer, attention, objectives, optimization, and generation).
+There is also a Foundations section that explains the ideas this code assumes you know (tokenization, the decoder-only Transformer, attention, objectives, optimization, generation, and how to estimate a model's size, compute and memory), a Modern LLM section for everything that changed since the original Transformer, and the laptop track.
 
 ## Run the Whole Thing
 
@@ -834,9 +835,33 @@ python tests/test_post_training_smoke.py                          # core math, o
 python scripts/train_sft.py --config configs/smoke/sft.json       # a real (tiny) training run
 ```
 
+## Type Safety and Tests
+
+Most bugs in training code do not crash. A misspelled config key quietly keeps its default, and a tensor with one extra dimension broadcasts into a bigger one and gives a slightly wrong loss. So the repo checks three things:
+
+- **Configs are typed.** Every stage config is a dataclass with real types, and the loader checks every value from the JSON files and the command line. A typo stops the run with a hint:
+
+  ```
+  train_dpo.py: error: my.json: unknown key 'betta' for DPOConfig (did you mean 'beta'?)
+  ```
+
+- **Tensor shapes are part of the types.** Functions say what they take, for example `Float[Tensor, "batch seq vocab"]` ([jaxtyping](https://github.com/patrick-kidger/jaxtyping)), and the tests check every call at runtime.
+- **mypy and ruff run in CI**, along with the tests on Linux, Windows and macOS. One test trains every stage, pretraining to GRPO, for a few steps on generated data.
+
+```bash
+uv sync            # or: pip install -e . pytest beartype ruff mypy
+uv run pytest      # about 170 tests; add -m "not slow" to skip the end-to-end run
+uv run mypy
+uv run ruff check .
+```
+
+The [type safety guide](docs/howto/type_safety.md) shows a real bug the shape checks catch and plain PyTorch does not, and [CONTRIBUTING.md](CONTRIBUTING.md) explains how to add code that keeps these checks green.
+
 ## What's Next
 
-I recommend you start by training the 13 million parameter model, see it produce sensible words, then scale `n_embed` and `n_blocks` up with the memory flags until you hit your GPU limit. After that, walk the post-training chain one stage at a time and watch the GSM8K number move. Every stage is small enough to read in one sitting, and they all share the same model.
+I recommend you start small. With no GPU, train the `tiny` preset on your laptop and watch it write its first stories. With a GPU, train the 13 million parameter model, see it produce sensible words, then scale `n_embed` and `n_blocks` up with the memory flags until you hit your GPU limit. Then try `--arch modern` on the same data and compare the curves. After that, walk the post-training chain one stage at a time and watch the GSM8K number move. Every stage is small enough to read in one sitting, and they all share the same model.
+
+What changed in each release, and who contributed it, is in [CHANGELOG.md](CHANGELOG.md).
 
 If you want to go deeper on any single stage, the documentation site has a focused page for each one.
 
