@@ -68,6 +68,17 @@ def k3_kl(new_logp: Float[Tensor, "*shape"], ref_logp: Float[Tensor, "*shape"]) 
     return torch.exp(diff) - diff - 1.0
 
 
+def _mean_over_answers(per_answer: Float[Tensor, " batch"], mask: Bool[Tensor, "batch steps"]) -> Float[Tensor, ""]:
+    """Average over the answers that have at least one trained token.
+
+    ``--filter_groups`` masks out every token of a skipped group. Counting those empty rows in
+    the average would shrink the update by the fraction of skipped groups, like a random
+    learning-rate cut, so they are left out.
+    """
+    active = mask.any(dim=-1).to(per_answer.dtype)
+    return (per_answer * active).sum() / active.sum().clamp(min=1.0)
+
+
 def aggregate_token_loss(
     per_token: Float[Tensor, "batch steps"],
     mask: Bool[Tensor, "batch steps"],
@@ -83,14 +94,17 @@ def aggregate_token_loss(
       counts the same, so each token of a long answer counts less. This is the GRPO paper.
     - ``seq-mean-token-sum-norm``: sum inside each answer, divide by a constant (the generation
       budget ``max_len``), then average. Dr. GRPO: unbiased and still length-independent.
+
+    Answers whose mask is empty (groups skipped by ``--filter_groups``) are left out of the
+    per-answer averages.
     """
     m = mask.to(per_token.dtype)
     if mode == "token-mean":
         return masked_mean(per_token, m)
     if mode == "seq-mean-token-mean":
-        return masked_mean_per_row(per_token, m).mean()
+        return _mean_over_answers(masked_mean_per_row(per_token, m), mask)
     if mode == "seq-mean-token-sum-norm":
-        return ((per_token * m).sum(dim=-1) / float(max_len or per_token.size(-1))).mean()
+        return _mean_over_answers((per_token * m).sum(dim=-1) / float(max_len or per_token.size(-1)), mask)
     raise ValueError(f"unknown loss aggregation {mode!r}")
 
 
@@ -133,8 +147,8 @@ def grpo_loss(
         log_ratio = masked_mean_per_row(new_logp - old_logp, resp_mask)
         ratio = torch.exp(log_ratio)
         surrogate = torch.min(ratio * advantages, torch.clamp(ratio, 1.0 - clip, 1.0 + high) * advantages)
-        loss = -(surrogate - kl_coef * masked_mean_per_row(kl, resp_mask)).mean()
-        clipped = ((ratio < 1.0 - clip) | (ratio > 1.0 + high)).float().mean()
+        loss = -_mean_over_answers(surrogate - kl_coef * masked_mean_per_row(kl, resp_mask), resp_mask)
+        clipped = _mean_over_answers(((ratio < 1.0 - clip) | (ratio > 1.0 + high)).float(), resp_mask)
     else:
         ratio = torch.exp(new_logp - old_logp)
         surrogate = torch.min(ratio * adv, torch.clamp(ratio, 1.0 - clip, 1.0 + high) * adv)

@@ -68,6 +68,29 @@ def test_loss_aggregation_modes() -> None:
     assert aggregate_token_loss(per_token, mask, "seq-mean-token-sum-norm", max_len=8).item() == pytest.approx((4 / 8 + 4 / 8) / 2)
 
 
+def test_skipped_groups_do_not_shrink_the_update() -> None:
+    """--filter_groups masks whole answers; every averaging mode must ignore them, not count zeros."""
+    torch.manual_seed(0)
+    old = torch.randn(4, 5) - 2
+    new = old + 0.1 * torch.randn(4, 5)
+    adv = torch.tensor([1.0, -0.5, 0.0, 0.0])
+    mask = torch.ones(4, 5, dtype=torch.bool)
+    mask[0, 3:] = False
+    skipped = mask.clone()
+    skipped[2:] = False  # the last two answers belong to a group with no reward spread
+    for mode in ("token-mean", "seq-mean-token-mean", "seq-mean-token-sum-norm"):
+        full = aggregate_token_loss(new, skipped, mode, max_len=5)
+        kept = aggregate_token_loss(new[:2], skipped[:2], mode, max_len=5)
+        assert full.item() == pytest.approx(kept.item()), mode
+    for level in ("token", "sequence"):
+        full, _ = grpo_loss(new, old, old, adv, skipped, kl_coef=0.04, ratio_level=level, loss_agg="seq-mean-token-mean")
+        kept, _ = grpo_loss(new[:2], old[:2], old[:2], adv[:2], skipped[:2], kl_coef=0.04, ratio_level=level,
+                            loss_agg="seq-mean-token-mean")
+        assert full.item() == pytest.approx(kept.item()), level
+    empty = torch.zeros(4, 5, dtype=torch.bool)  # a micro-batch where every group was skipped
+    assert aggregate_token_loss(new, empty, "seq-mean-token-mean").item() == 0.0
+
+
 def test_grpo_default_is_unchanged_and_clip_higher_widens_the_range() -> None:
     torch.manual_seed(0)
     B, L = 4, 6
