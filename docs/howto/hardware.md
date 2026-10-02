@@ -38,6 +38,10 @@ laptop with an Intel Core Ultra 7 255H (16 cores), TinyStories data, 4096-token 
 | `tiny` | classic | 636K | 1,500 | 8 min 3 s | 3.30 |
 | `tiny` | modern | 369K | 1,500 | 5 min 17 s | 2.78 |
 
+The `student` preset (2.6M parameters, modern) ran its first 400 steps in under 7 minutes, so
+its 4,000 steps take about 70 minutes on a quiet laptop. Our run shared the laptop with other
+work and reached a training loss of 1.80 after 3,300 steps and two hours.
+
 Two settings matter on a CPU:
 
 - **Threads.** PyTorch uses one thread per physical core by default, which is usually right.
