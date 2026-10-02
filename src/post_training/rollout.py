@@ -26,7 +26,9 @@ from dataclasses import dataclass
 import torch
 import torch.nn.functional as F
 
+from src.checkpoint import unwrap_model
 from src.inference.sampling import filter_logits
+from src.models.modern import ModernTransformer
 from src.post_training.chat_template import EOT_ID
 
 __all__ = [
@@ -84,6 +86,7 @@ def generate_with_logprobs(
     stop_tokens: tuple[int, ...] = (EOT_ID,),
     pad_id: int = EOT_ID,
     context_length: int | None = None,
+    use_cache: bool = True,
 ) -> RolloutBatch:
     """
     Autoregressively sample a completion for each prompt and record per-token log-probs.
@@ -92,8 +95,9 @@ def generate_with_logprobs(
     Rows stop individually once they emit any ``stop_tokens``; subsequent positions are
     filled with ``pad_id`` and excluded from ``response_mask``.
 
-    No KV cache (kept for clarity): each step re-runs the prefix, which is fine for the
-    short sequences here on an H100.
+    The modern model decodes with its KV cache: the prompts are processed once and every
+    later step feeds only the newest token. The classic model has no cache, so each step
+    re-runs the prefix (``use_cache=False`` does the same for the modern model).
     """
     model.eval()
     device = prompt_ids.device
@@ -110,10 +114,19 @@ def generate_with_logprobs(
     gen_logprobs = torch.zeros(B, max_new_tokens, device=device)
     gen_mask = torch.zeros(B, max_new_tokens, dtype=torch.bool, device=device)
     finished = torch.zeros(B, dtype=torch.bool, device=device)
+    # prompt + generation fits in the context (checked above), so the cache never overflows
+    plain = unwrap_model(model)
+    backbone = unwrap_model(getattr(plain, "transformer", plain))  # the policy behind a value head
+    cache = backbone.new_cache(B) if use_cache and isinstance(backbone, ModernTransformer) else None
 
     for t in range(max_new_tokens):
-        idx_cond = sequences[:, -cap:]
-        logits = _logits_from(model, idx_cond)[:, -1, :]  # (B, vocab)
+        if cache is None:
+            idx_cond = sequences[:, -cap:]
+            logits = _logits_from(model, idx_cond)[:, -1, :]  # (B, vocab)
+        else:  # prefill the prompts once, then decode one token per step
+            assert isinstance(backbone, ModernTransformer)
+            new_tokens = sequences if t == 0 else sequences[:, -1:]
+            logits = backbone.lm_head(backbone.forward_hidden(new_tokens, cache)[:, -1, :])
 
         # Full-distribution log-prob at the sampling temperature (matches recompute).
         full_logprobs = F.log_softmax(logits.float() / max(temperature, 1e-6), dim=-1)

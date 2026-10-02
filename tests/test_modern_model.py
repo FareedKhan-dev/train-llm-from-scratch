@@ -260,3 +260,22 @@ def test_post_training_wrappers_accept_the_modern_model() -> None:
     rb = generate_with_logprobs(model, idx[:, :4], max_new_tokens=6)
     lp, mask = compute_logprobs(model, rb.sequences, rb.response_mask, requires_grad=False)
     assert torch.allclose(rb.gen_logprobs[rb.response_mask[:, 4:]], lp[mask], atol=1e-4)
+
+
+def test_rl_rollouts_use_the_kv_cache_and_sample_the_same_tokens() -> None:
+    from src.post_training.rollout import generate_with_logprobs
+    from src.post_training.value_head import TransformerWithValueHead
+
+    model = _model(VARIANTS["gqa"])
+    prompts = torch.randint(0, BASE.vocab_size, (3, 5))
+    runs = []
+    for use_cache in (True, False):
+        torch.manual_seed(0)
+        runs.append(generate_with_logprobs(model, prompts, 12, temperature=0.9, use_cache=use_cache))
+    cached, plain = runs
+    assert torch.equal(cached.sequences, plain.sequences)
+    assert torch.allclose(cached.gen_logprobs, plain.gen_logprobs, atol=1e-5)
+    # the PPO actor wraps the policy in a value head; its rollouts take the cached path too
+    actor = TransformerWithValueHead(model)  # built before seeding: its init draws random numbers
+    torch.manual_seed(0)
+    assert torch.equal(generate_with_logprobs(actor, prompts, 12, temperature=0.9).sequences, cached.sequences)
