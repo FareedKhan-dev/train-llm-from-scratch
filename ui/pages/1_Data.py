@@ -14,7 +14,7 @@ from ui.stages import DATA_DIR, DATA_SCRIPTS
 
 theme.setup_page("Data", "📦")
 theme.hero("📦  Data preparation",
-           "Download & preprocess the corpora — Pile (pretrain), Alpaca/Dolly/GSM8K (SFT), "
+           "Download & preprocess the corpora: Pile (pretrain), Alpaca/Dolly/GSM8K (SFT), "
            "HH-RLHF/UltraFeedback (preferences), GSM8K + arithmetic (RL).")
 
 st.caption("Each button launches the real `scripts/prepare_*.py` as a background job. "
@@ -35,9 +35,9 @@ for name, args in DATA_SCRIPTS.items():
 
 st.subheader("Live log")
 last = st.session_state.get("last_data_job")
-sel = st.selectbox("Job", [j["job_id"] for j in jobs.active_jobs() if j["job_id"].startswith("data_")] or ["—"],
+sel = st.selectbox("Job", [j["job_id"] for j in jobs.active_jobs() if j["job_id"].startswith("data_")] or ["(none running)"],
                    index=0)
-job_to_show = sel if sel != "—" else last
+job_to_show = sel if sel != "(none running)" else last
 if job_to_show:
     st.code(jobs.tail_log(job_to_show, 10000) or "(no log yet)", language="text")
     if jobs.status(job_to_show) == "running" and st.toggle("Auto-refresh", value=True):

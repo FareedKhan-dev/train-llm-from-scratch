@@ -12,7 +12,7 @@ from ui import theme
 from ui.stages import CKPT_DIR
 
 theme.setup_page("Chat", "💬")
-theme.hero("💬  Chat", "Talk to any checkpoint — chat template for instruction models, raw mode for the base.")
+theme.hero("💬  Chat", "Talk to any checkpoint: chat template for instruction models, raw mode for the base.")
 
 ckpts = sorted(glob.glob(os.path.join(CKPT_DIR, "**", "*.pt"), recursive=True))
 if not ckpts:

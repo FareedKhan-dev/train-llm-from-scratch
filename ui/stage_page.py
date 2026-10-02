@@ -65,7 +65,7 @@ def render_stage_page(stage_key: str) -> None:
             auto = st.toggle("Auto-refresh", value=(job_status == "running"), key=f"auto_{stage.key}")
 
         st.subheader("Live log")
-        st.code(jobs.tail_log(stage.key, 12000) or "(no log yet — launch the stage)", language="text")
+        st.code(jobs.tail_log(stage.key, 12000) or "(no log yet: launch the stage)", language="text")
 
         st.subheader("Metrics")
         log = metrics.latest_log(stage.log_prefix)
