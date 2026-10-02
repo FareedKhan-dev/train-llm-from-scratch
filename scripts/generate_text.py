@@ -8,6 +8,7 @@ and the window it was trained on. So you only pass the checkpoint path:
     python scripts/generate_text.py --model_path models/tiny.pt
     python scripts/generate_text.py --model_path models/student.pt --input_text "The little dog" \
         --max_new_tokens 200 --temperature 0.7 --top_k 40 --num_samples 3
+    python scripts/generate_text.py --model_path models/tiny.pt --int8   # int8 linear weights
 
 Very old checkpoints that stored only the weights fall back to the sizes in config/config.py.
 """
@@ -30,6 +31,7 @@ from src.checkpoint import (  # noqa: E402
     model_state_from_checkpoint,
 )
 from src.device import resolve_device  # noqa: E402
+from src.inference.quantize import Int8Linear, quantize_int8  # noqa: E402
 from src.models.factory import build_model  # noqa: E402
 from src.tokenizer import safe_decode, tokenizer_from_spec  # noqa: E402
 
@@ -83,13 +85,17 @@ def main() -> None:
     parser.add_argument("--num_samples", type=int, default=1, help="How many continuations to print.")
     parser.add_argument("--device", default="auto", help="auto, cuda, mps or cpu.")
     parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducible samples.")
+    parser.add_argument("--int8", action="store_true", help="Store the linear weights as int8 (about 4x smaller).")
     args = parser.parse_args()
 
     if args.seed is not None:
         torch.manual_seed(args.seed)
     device = resolve_device(args.device)
     model, tokenizer, window, model_cfg = load_trained_model(args.model_path, device)
-    n_params = sum(p.numel() for p in model.parameters())
+    if args.int8:
+        model = quantize_int8(model)
+    n_params = sum(p.numel() for p in model.parameters()) + sum(
+        m.weight_int8.numel() for m in model.modules() if isinstance(m, Int8Linear))
     print(f"Loaded {args.model_path}: {n_params:,} parameters, {model_cfg.get('arch', 'classic')} "
           f"architecture, window {window} tokens, on {device}")
 

@@ -8,6 +8,7 @@ One-shot:
     python scripts/chat.py --ckpt models/sft.pt --prompt "What is 13 + 29?"
     python scripts/chat.py --ckpt models/grpo.pt --prompt "..." --greedy
     python scripts/chat.py --ckpt models/base_pretrained.pt --raw --prompt "Once upon a time"
+    python scripts/chat.py --ckpt models/sft.pt --int8 --prompt "..."   # int8 linear weights
 Interactive REPL (no --prompt):
     python scripts/chat.py --ckpt models/sft.pt
 """
@@ -21,8 +22,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # run from the rep
 
 import argparse
 
-import torch
-
+from src.device import resolve_device
+from src.inference.quantize import quantize_int8
 from src.post_training.inference import generate_reply, load_model_from_ckpt
 
 
@@ -37,11 +38,15 @@ def main():
     p.add_argument("--top_p", type=float, default=0.95)
     p.add_argument("--top_k", type=int, default=None)
     p.add_argument("--greedy", action="store_true", help="deterministic argmax decoding")
-    p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    p.add_argument("--device", default="auto", help="auto (CUDA, then Apple MPS, then CPU), cuda, mps or cpu")
+    p.add_argument("--int8", action="store_true", help="store the linear weights as int8 (about 4x smaller)")
     args = p.parse_args()
+    args.device = resolve_device(args.device)
 
     model = load_model_from_ckpt(args.ckpt, args.device)
     n = sum(p.numel() for p in model.parameters())
+    if args.int8:
+        model = quantize_int8(model)
     print(f"loaded {args.ckpt} ({n/1e6:.0f}M params) on {args.device} | "
           f"mode={'raw' if args.raw else 'chat'} {'greedy' if args.greedy else f'T={args.temperature} top_p={args.top_p}'}")
 
