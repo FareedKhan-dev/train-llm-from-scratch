@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import dataclasses
+import difflib
 import json
 import os
 import re
@@ -45,6 +47,7 @@ from config.presets import PRESETS, apply_preset
 from src.checkpoint import model_state_from_checkpoint
 from src.device import DEVICE_CHOICES, configure_cpu_threads, resolve_device, sync_step
 from src.models.factory import ARCHITECTURES, build_model
+from src.models.modern import ModernConfig
 from src.models.transformer import Transformer
 from src.tokenizer import DEFAULT_TOKENIZER, safe_decode, tokenizer_from_spec
 
@@ -424,6 +427,9 @@ def parse_args() -> argparse.Namespace:
                         help="CPU threads (default: one per physical core). Fewer can be faster on hybrid CPUs.")
     parser.add_argument("--sample", default=None,
                         help="Prompt to continue after training (the CPU presets use 'Once upon a time').")
+    parser.add_argument("--set", action="append", default=None, metavar="KEY=VALUE",
+                        help="Override any config value, e.g. --set qk_norm=false --set n_kv_head=2 "
+                             "(modern model options included). Repeatable.")
     parser.add_argument(
         "--resume",
         nargs="?",
@@ -490,6 +496,21 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def parse_override(item: str, allowed: set[str]) -> tuple[str, Any]:
+    """Split ``key=value``. Values are read as JSON (true, 2, 1e-3, null), anything else as text."""
+    key, sep, raw = item.partition("=")
+    key = key.strip()
+    if not sep or not key:
+        raise SystemExit(f"--set expects KEY=VALUE, got {item!r}")
+    if key not in allowed:
+        close = difflib.get_close_matches(key, sorted(allowed), n=1)
+        raise SystemExit(f"--set: unknown key {key!r}" + (f" (did you mean {close[0]!r}?)" if close else ""))
+    try:
+        return key, json.loads(raw)
+    except json.JSONDecodeError:
+        return key, raw
+
+
 def resolve_train_config(args: argparse.Namespace) -> dict[str, Any]:
     """config/config.py, then the preset, then command-line flags (later wins)."""
     train_config = dict(config)
@@ -506,6 +527,12 @@ def resolve_train_config(args: argparse.Namespace) -> dict[str, Any]:
     if args.steps is not None:
         train_config["t_train_steps"] = args.steps
         train_config["t_lr_decay_step"] = int(args.steps * 0.8)
+    modern_keys = {f.name for f in dataclasses.fields(ModernConfig)}
+    for item in args.set or []:
+        key, value = parse_override(item, set(train_config) | modern_keys)
+        if key in modern_keys - set(config) and train_config.get("arch", "classic") != "modern":
+            print(f"Note: --set {key} only affects the modern architecture (add --arch modern).")
+        train_config[key] = value
     train_config["device"] = resolve_device(args.device or train_config.get("device", "auto"))
 
     if not os.path.exists(train_config["train_path"]):

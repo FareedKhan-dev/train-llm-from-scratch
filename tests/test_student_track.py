@@ -61,6 +61,20 @@ def test_train_then_generate(monkeypatch: pytest.MonkeyPatch, tiny_data: dict[st
     assert text.startswith("Once upon a time") and len(text) > len("Once upon a time")
 
 
+def test_set_overrides_any_config_value(monkeypatch: pytest.MonkeyPatch, tiny_data: dict[str, str]) -> None:
+    out = _train(monkeypatch, tiny_data, "--arch", "modern", "--set", "qk_norm=false", "--set", "n_kv_head=2",
+                 "--set", "attention=mla")
+    cfg = torch.load(out, weights_only=False)["config"]
+    assert cfg["qk_norm"] is False and cfg["n_kv_head"] == 2 and cfg["attention"] == "mla"
+    model, *_ = generate_text.load_trained_model(str(out), "cpu")
+    assert model.config.attention == "mla" and not model.config.qk_norm
+
+    with pytest.raises(SystemExit, match="did you mean 'qk_norm'"):
+        _train(monkeypatch, tiny_data, "--set", "qknorm=false")
+    with pytest.raises(SystemExit, match="KEY=VALUE"):
+        _train(monkeypatch, tiny_data, "--set", "qk_norm")
+
+
 def test_missing_data_explains_how_to_make_it(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(sys, "argv", ["train_transformer.py", "--preset", "tiny", "--train-path", str(tmp_path / "nope.h5")])
     with pytest.raises(SystemExit, match="prepare_tiny_data"):
