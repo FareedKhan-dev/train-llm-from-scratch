@@ -68,7 +68,14 @@ jobs:
           fi
           uv pip install -e . pytest beartype
       - name: pytest
-        run: uv run --no-sync pytest -q
+        shell: bash
+        run: |
+          # The end-to-end pipeline test (marked slow) runs every training script; once is enough.
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            uv run --no-sync pytest -q
+          else
+            uv run --no-sync pytest -q -m "not slow"
+          fi
 
   docs:
     runs-on: ubuntu-latest
