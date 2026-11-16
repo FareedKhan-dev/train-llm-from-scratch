@@ -20,8 +20,10 @@ from src.post_training.chat_template import (
     THINK_OPEN,
 )
 
-# A number: optional sign, digits with optional thousands commas, optional decimal.
-_NUMBER_RE = re.compile(r"-?\$?\d[\d,]*(?:\.\d+)?")
+# A number: optional sign, digits with optional thousands commas, optional decimal, or a
+# bare decimal such as ".5". It may not start right after a letter, a digit or a point, so
+# the hyphen in "10-15" or "COVID-19" is not read as a minus sign and ".5" keeps its point.
+_NUMBER_RE = re.compile(r"(?<![\w.])-?\$?(?:\d[\d,]*(?:\.\d+)?|\.\d+)")
 _ANSWER_RE = re.compile(re.escape(ANSWER_OPEN) + r"(.*?)" + re.escape(ANSWER_CLOSE), re.DOTALL)
 _THINK_RE = re.compile(re.escape(THINK_OPEN) + r"(.*?)" + re.escape(THINK_CLOSE), re.DOTALL)
 _HASH_RE = re.compile(r"####\s*(-?\$?\d[\d,]*(?:\.\d+)?)")
@@ -50,13 +52,15 @@ def extract_think(text: str) -> str | None:
 def extract_answer(text: str) -> float | None:
     """
     Extract the model's final numeric answer with graceful fallback:
-    1) inside an ``<answer>...</answer>`` tag, else
+    1) inside an ``<answer>...</answer>`` tag (after its last ``=`` when it holds one), else
     2) after a GSM8K-style ``#### N``, else
     3) the last number appearing anywhere in the text.
     """
     m = _ANSWER_RE.search(text)
     if m:
-        n = parse_number(m.group(1))
+        inside = m.group(1)
+        # "<answer>5 + 3 = 8</answer>" answers 8, the result, not 5, the first number.
+        n = parse_number(inside.rsplit("=", 1)[-1]) if "=" in inside else parse_number(inside)
         if n is not None:
             return n
     m = _HASH_RE.search(text)
