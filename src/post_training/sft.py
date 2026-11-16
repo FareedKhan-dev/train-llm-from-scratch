@@ -15,7 +15,12 @@ import torch
 import torch.nn.functional as F
 
 
-def sft_loss(logits: torch.Tensor, tokens: torch.Tensor, loss_mask: torch.Tensor) -> torch.Tensor:
+def sft_loss(
+    logits: torch.Tensor,
+    tokens: torch.Tensor,
+    loss_mask: torch.Tensor,
+    num_tokens: float | None = None,
+) -> torch.Tensor:
     """
     Masked next-token cross-entropy.
 
@@ -23,6 +28,11 @@ def sft_loss(logits: torch.Tensor, tokens: torch.Tensor, loss_mask: torch.Tensor
         logits:    (B, T, V) model logits for ``tokens``.
         tokens:    (B, T) packed token ids.
         loss_mask: (B, T) 1 on tokens that should be predicted (assistant completions).
+        num_tokens: divide the summed loss by this count instead of by this batch's own number
+            of masked targets. Gradient accumulation passes the count over every micro-batch of
+            the optimizer step, so each trained token weighs the same whichever micro-batch it
+            is in. Averaging per micro-batch would weigh a token in a micro-batch with few
+            trained tokens far more than one in a full micro-batch.
 
     Returns:
         Scalar loss averaged over masked target positions.
@@ -35,7 +45,14 @@ def sft_loss(logits: torch.Tensor, tokens: torch.Tensor, loss_mask: torch.Tensor
     V = logits.size(-1)
     ce = F.cross_entropy(logits.reshape(-1, V).float(), targets.reshape(-1).long(), reduction="none")
     ce = ce.view(targets.shape) * mask
+    if num_tokens is not None:
+        return ce.sum() / max(float(num_tokens), 1.0)
     return ce.sum() / mask.sum().clamp(min=1.0)
+
+
+def count_targets(loss_mask: torch.Tensor) -> int:
+    """The number of target positions :func:`sft_loss` trains on in a ``(B, T)`` mask."""
+    return int(loss_mask[:, 1:].sum().item())
 
 
 def pack_examples(

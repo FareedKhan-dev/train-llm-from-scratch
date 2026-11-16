@@ -32,7 +32,7 @@ from src.post_training.cli import parse_config_with_json
 from src.post_training.distributed import cleanup, ddp_setup, ddp_wrap, reduce_scalar
 from src.post_training.logging_utils import MetricsLogger
 from src.post_training.optim import configure_optimizer, cosine_lr, set_lr
-from src.post_training.sft import sft_loss
+from src.post_training.sft import count_targets, sft_loss
 from src.post_training.utils import (
     amp_autocast,
     load_backbone_from_ckpt,
@@ -60,6 +60,30 @@ def eval_dev(model, cfg, ctx, dev_path: str, max_batches: int = 50) -> float:
             break
     model.train()
     return total / max(1, n)
+
+
+def accumulate_gradients(model, micro_batches, cfg, ctx) -> float:
+    """Backpropagate one optimizer step over its micro-batches and return its SFT loss.
+
+    The summed loss is divided by the number of trained tokens in the whole step, on every
+    rank, so a token weighs the same whichever micro-batch or GPU it lands on. DDP averages
+    gradients over ranks, so each rank divides by that global count over ``world_size``.
+    """
+    n_local = float(sum(count_targets(mask) for _, mask, _ in micro_batches))
+    n_global = reduce_scalar(n_local, ctx, average=False)
+    denom = max(n_global, 1.0) / (ctx.world_size if ctx.enabled else 1)
+    ce_sum = 0.0
+    for micro, (tokens, mask, _) in enumerate(micro_batches):
+        # Only sync gradients across GPUs on the last micro-batch.
+        sync = micro == len(micro_batches) - 1 or not ctx.enabled
+        with (contextlib.nullcontext() if sync else model.no_sync()), amp_autocast(cfg.amp_dtype, ctx.device):
+            logits, _ = model(tokens)
+            ce = sft_loss(logits, tokens, mask, num_tokens=denom)
+            # Mixture-of-Experts models also keep their experts balanced (0 for dense models)
+            loss = ce + moe_balance_loss(model) / len(micro_batches)
+        loss.backward()
+        ce_sum += ce.item() * denom
+    return ce_sum / max(n_local, 1.0)  # the plain SFT loss of this rank's tokens, for the log
 
 
 def model_to_save(model, use_lora: bool):
@@ -113,21 +137,11 @@ def main():
         set_lr(optimizer, lr)
 
         optimizer.zero_grad(set_to_none=True)
-        loss_sum = 0.0
-        for micro in range(cfg.grad_accum):
-            tokens, mask, epoch = next(train_it)
-            # Only sync gradients across GPUs on the last micro-batch.
-            sync = micro == cfg.grad_accum - 1 or not ctx.enabled
-            with (contextlib.nullcontext() if sync else model.no_sync()), amp_autocast(cfg.amp_dtype, ctx.device):
-                logits, _ = model(tokens)
-                ce = sft_loss(logits, tokens, mask)
-                # Mixture-of-Experts models also keep their experts balanced (0 for dense models)
-                loss = (ce + moe_balance_loss(model)) / cfg.grad_accum
-            loss.backward()
-            loss_sum += ce.item() / cfg.grad_accum  # log the plain SFT loss
+        micro_batches = [next(train_it) for _ in range(cfg.grad_accum)]
+        epoch = micro_batches[-1][2]
+        loss = torch.tensor(accumulate_gradients(model, micro_batches, cfg, ctx))
         if epoch >= cfg.epochs and cfg.max_steps <= 0:
             break
-        loss = torch.tensor(loss_sum)
         torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip)
         optimizer.step()
 
