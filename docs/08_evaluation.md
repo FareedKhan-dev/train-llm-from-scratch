@@ -82,6 +82,38 @@ ppo                     ...      200
 grpo                    ...      200
 ```
 
+## The base model on standard benchmarks
+
+GSM8K needs the chat format, so it says little about a base model straight out of pretraining.
+[`scripts/eval_base.py`](https://github.com/FareedKhan-dev/train-llm-from-scratch/blob/main/scripts/eval_base.py)
+scores any checkpoint the way base models are compared: the model is asked how likely each
+candidate answer is, with no generation.
+
+```bash
+python scripts/eval_base.py --ckpt models/base_pretrained.pt
+python scripts/eval_base.py --hf_model openai-community/gpt2   # a reference point
+```
+
+| task | what it measures | metrics | chance |
+|---|---|---|---|
+| ARC-Easy, ARC-Challenge | science questions, 3 to 5 answers | `acc` (total log-probability), `acc_norm` (per character) | about 25% |
+| LAMBADA | the last word of a passage that needs the whole passage | `acc` (greedy decoding is exactly right), perplexity | 0% |
+
+The log-likelihood of an answer is the sum, over its tokens, of the log-probability of each
+token given everything before it:
+
+$$
+\log p(\text{answer} \mid \text{question}) = \sum_{t \in \text{answer}} \log p(x_t \mid x_{<t})
+$$
+
+The prompts, the tokenization at the boundary, the truncation to the model's window and the
+normalization follow EleutherAI's lm-evaluation-harness exactly
+([`src/benchmarks/`](https://github.com/FareedKhan-dev/train-llm-from-scratch/tree/main/src/benchmarks)),
+so the numbers compare with published ones. On GPT-2 124M it gives ARC-Easy 43.81 / 39.48,
+ARC-Challenge 19.03 / 22.70 (acc / acc_norm) and LAMBADA 32.56% at perplexity 40.06.
+HellaSwag is not included: its source repository was taken down by a DMCA notice in
+September 2026.
+
 ## In-training metrics
 
 Each trainer also writes a metrics JSONL under `logs/` (via

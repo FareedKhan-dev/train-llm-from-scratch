@@ -61,6 +61,7 @@ Odambinais is uncertain and fortune established in rural areas.
   - [PPO](#ppo)
   - [GRPO / RLVR](#grpo--rlvr)
 - [Step 6: Evaluation](#step-6-evaluation)
+  - [Benchmarking the base model](#benchmarking-the-base-model)
 - [Step 7: Talking to the Model](#step-7-talking-to-the-model)
 - [The Streamlit Control Panel](#the-streamlit-control-panel)
 - [The Documentation Site](#the-documentation-site)
@@ -772,6 +773,29 @@ python scripts/eval_post_training.py --table logs/table.jsonl
 
 This builds the headline comparison so you can track every stage on one axis, Base, SFT, DPO, PPO, and GRPO, all with the same greedy decoding and the same verifiable reward: parse the number inside the `<answer>` tags and check it against the gold answer. The same command runs on any checkpoint, so you fill in the table for your own run, and the bigger the base model and the more pretraining compute you give it, the higher these scores go.
 
+### Benchmarking the base model
+
+GSM8K needs a model that answers in the chat format, so it says little about a base model straight out of pretraining. Base models are compared differently: the model reads a question and is asked how likely each candidate answer is, with no generation and no chat format. `scripts/eval_base.py` does this on any checkpoint from this repo:
+
+```bash
+python scripts/eval_base.py --ckpt models/base_pretrained.pt
+python scripts/eval_base.py --ckpt models/base_pretrained.pt --tasks arc_easy --limit 500   # quicker
+python scripts/eval_base.py --hf_model openai-community/gpt2   # a reference point (pip install transformers)
+```
+
+- **ARC-Easy and ARC-Challenge**: grade-school science questions with 3 to 5 answers. `acc` picks the answer with the highest total log-probability, `acc_norm` the highest per character, so a long answer is not penalized for being long. Guessing scores about 25%.
+- **LAMBADA**: passages whose last word can only be guessed from the whole passage. `acc` is how often greedy decoding produces exactly that word, and the perplexity is that of the last word.
+
+The prompts, the tokenization at the boundary between question and answer, the truncation and the normalization all follow EleutherAI's [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness), so the numbers compare with published ones. GPT-2 124M on this code:
+
+| model | ARC-Easy acc / acc_norm | ARC-Challenge acc / acc_norm | LAMBADA acc / perplexity |
+|---|---|---|---|
+| GPT-2 124M | 43.81 / 39.48 | 19.03 / 22.70 | 32.56 / 40.06 |
+
+lm-evaluation-harness 0.4.13 gives exactly these figures. Run on the same GPU, every one of the 19,341 answer log-likelihoods behind them agrees with the harness's to within 0.0006 (the harness scores one answer at a time, this code in batches of 8), and not a single prediction differs.
+
+A model of a few million parameters sits near chance on ARC; GPT-2's row shows where 124 million parameters trained on a large web corpus land. HellaSwag, the usual third benchmark, is not included: its source repository was taken down by a DMCA notice in September 2026, because part of its text comes from wikiHow.
+
 ### What changes after SFT
 
 The clearest effect of SFT is a change in behavior. The base model only knows how to continue text, so when you give it a question it just writes more text. After SFT the model has learned the chat format: it answers inside the `<think>...</think><answer>...</answer>` structure it was trained on, which is exactly the structure the reward model and the RL stages then optimize against. That learned format is the foundation every stage after it builds on. You can talk to any stage's checkpoint with `scripts/chat.py` and watch this directly, which is the next section.
@@ -847,11 +871,11 @@ Most bugs in training code do not crash. A misspelled config key quietly keeps i
   ```
 
 - **Tensor shapes are part of the types.** Functions say what they take, for example `Float[Tensor, "batch seq vocab"]` ([jaxtyping](https://github.com/patrick-kidger/jaxtyping)), and the tests check every call at runtime.
-- **mypy and ruff run in CI**, along with the tests on Linux, Windows and macOS. One test trains every stage, pretraining to GRPO, for a few steps on generated data.
+- **mypy and ruff run in CI**, along with the tests on Linux, Windows and macOS. One test trains every stage, pretraining to GRPO, for a few steps on generated data; `E2E_DEVICE=cuda uv run pytest tests/test_pipeline_e2e.py` runs it on a GPU.
 
 ```bash
 uv sync            # or: pip install -e . pytest beartype ruff mypy
-uv run pytest      # about 170 tests; add -m "not slow" to skip the end-to-end run
+uv run pytest      # about 220 tests; add -m "not slow" to skip the end-to-end run
 uv run mypy
 uv run ruff check .
 ```
