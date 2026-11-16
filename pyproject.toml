@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "train-llm-from-scratch"
-version = "0.2.0"
+version = "1.0.0"
 description = "Train an LLM from scratch in pure PyTorch: pretraining, SFT, reward modeling, PPO, DPO and GRPO, on a GPU or a laptop CPU."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -51,6 +51,7 @@ packages = [
     "config",
     "data_loader",
     "src",
+    "src.benchmarks",
     "src.inference",
     "src.models",
     "src.models.modern",
@@ -109,6 +110,7 @@ module = [
     "config.paths",
     "config.post_training_config",
     "config.presets",
+    "src.benchmarks.*",
     "src.checkpoint",
     "src.device",
     "src.inference.*",

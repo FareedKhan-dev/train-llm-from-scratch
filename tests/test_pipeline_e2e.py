@@ -6,7 +6,8 @@ Every training script, end to end, exactly as a user runs them:
 Each script runs as a subprocess with the smoke configs (tiny model, CPU) on data generated
 into a temp folder, for both architectures. This is the test that catches a broken flag, a
 config field a trainer forgot, or a checkpoint one stage writes and the next cannot read.
-Takes a couple of minutes on a laptop; skip it with `pytest -m "not slow"`.
+Takes a couple of minutes on a laptop; skip it with `pytest -m "not slow"`. Set
+`E2E_DEVICE=cuda` (or `mps`) to run the same chain on an accelerator.
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ from src.post_training.sft import pack_examples
 
 pytestmark = pytest.mark.slow
 REPO = Path(__file__).resolve().parents[1]
+DEVICE = os.environ.get("E2E_DEVICE", "cpu")
 
 
 @pytest.fixture(scope="module")
@@ -73,7 +75,7 @@ def run(script: str, *args: object) -> str:
 @pytest.mark.parametrize("arch", ["classic", "modern"])
 def test_every_stage_trains_and_hands_over_its_checkpoint(arch: str, data: Path, tmp_path: Path) -> None:
     ck = tmp_path / "models"
-    common = ["--device", "cpu", "--log_dir", tmp_path / "logs", "--arch", arch]
+    common = ["--device", DEVICE, "--log_dir", tmp_path / "logs", "--arch", arch]
     if arch == "modern":
         common += ["--n_kv_head", "2"]
 
@@ -106,5 +108,5 @@ def test_every_stage_trains_and_hands_over_its_checkpoint(arch: str, data: Path,
     for name in ("base", "sft", "sft_lora", "reward", "dpo", "simpo", "ppo", "grpo"):
         assert isinstance(load_model_from_ckpt(str(ck / f"{name}.pt"), "cpu"), expected), name
 
-    reply = run("chat.py", "--ckpt", ck / "grpo.pt", "--prompt", "What is 2 + 3?", "--max_new_tokens", 8, "--device", "cpu")
+    reply = run("chat.py", "--ckpt", ck / "grpo.pt", "--prompt", "What is 2 + 3?", "--max_new_tokens", 8, "--device", DEVICE)
     assert "loaded" in reply

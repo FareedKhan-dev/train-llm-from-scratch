@@ -182,7 +182,7 @@ def test_moe_loss_includes_aux_in_training_only_and_active_params_are_smaller() 
     idx = torch.randint(0, BASE.vocab_size, (2, 8))
     logits, loss = model(idx, idx)
     plain = F.cross_entropy(logits.reshape(-1, BASE.vocab_size), idx.reshape(-1))
-    assert model.aux_loss is not None and float(model.aux_loss) > 0
+    assert model.aux_loss is not None and float(model.aux_loss.detach()) > 0
     assert torch.allclose(loss, plain + BASE.moe_aux_loss_coef * model.aux_loss)
     # An evaluation reports the loss on the text alone, so dense and MoE dev losses compare.
     logits, loss = model.eval()(idx, idx)
