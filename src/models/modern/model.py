@@ -104,7 +104,9 @@ class ModernTransformer(nn.Module):
         loss = None
         if targets is not None:
             loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)), targets.reshape(-1).long())
-            if self.aux_loss is not None:
+            # The balancing term is a training signal, not part of the model's loss on the text,
+            # so an evaluation in eval mode reports plain cross-entropy (and a true perplexity).
+            if self.aux_loss is not None and self.training:
                 loss = loss + self.config.moe_aux_loss_coef * self.aux_loss
         return logits, loss
 

@@ -9,7 +9,10 @@ How a token is routed:
 
 1. A small linear *router* scores every expert; a softmax turns the scores into probabilities.
 2. The token goes to its ``top_k`` highest-scoring experts.
-3. Their outputs are mixed with the router probabilities (renormalized over the chosen ones).
+3. Their outputs are mixed with the router probabilities, renormalized over the chosen ones.
+   With ``top_k == 1`` the raw probability is kept instead, as in the Switch Transformer:
+   renormalizing a single weight makes it exactly 1, and the router would then get no
+   gradient from the language-modeling loss at all.
 4. Optional *shared experts* (DeepSeekMoE) process every token, holding common knowledge so
    the routed experts can specialize.
 
@@ -19,8 +22,8 @@ learn. The Switch Transformer load-balancing loss fixes this:
     aux = n_experts * sum_e  f_e * P_e
 
 where ``f_e`` is the fraction of routing slots that went to expert ``e`` and ``P_e`` is the
-mean router probability of ``e``. It is smallest when both are uniform. The model adds
-``moe_aux_loss_coef * aux`` to the language-modeling loss.
+mean router probability of ``e``. It is smallest when both are uniform. During training the
+model adds ``moe_aux_loss_coef * aux`` to the language-modeling loss.
 """
 
 from __future__ import annotations
@@ -50,7 +53,9 @@ class MoE(nn.Module):
         flat = x.reshape(-1, C)
         probs = F.softmax(self.router(flat).float(), dim=-1)  # (N, E)
         weights, chosen = probs.topk(self.top_k, dim=-1)  # (N, k)
-        weights = (weights / weights.sum(dim=-1, keepdim=True)).to(x.dtype)
+        if self.top_k > 1:
+            weights = weights / weights.sum(dim=-1, keepdim=True)
+        weights = weights.to(x.dtype)
 
         out = torch.zeros_like(flat)
         for e, expert in enumerate(self.experts):

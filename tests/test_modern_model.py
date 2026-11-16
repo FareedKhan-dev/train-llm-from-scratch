@@ -177,14 +177,28 @@ def test_moe_routes_tokens_and_balancing_loss_trains_the_router() -> None:
     assert moe.router.weight.grad is not None and moe.router.weight.grad.abs().sum() > 0
 
 
-def test_moe_loss_includes_aux_and_active_params_are_smaller() -> None:
-    model = _model(VARIANTS["moe"])
+def test_moe_loss_includes_aux_in_training_only_and_active_params_are_smaller() -> None:
+    model = _model(VARIANTS["moe"]).train()
     idx = torch.randint(0, BASE.vocab_size, (2, 8))
     logits, loss = model(idx, idx)
     plain = F.cross_entropy(logits.reshape(-1, BASE.vocab_size), idx.reshape(-1))
-    assert model.aux_loss is not None
+    assert model.aux_loss is not None and float(model.aux_loss) > 0
     assert torch.allclose(loss, plain + BASE.moe_aux_loss_coef * model.aux_loss)
+    # An evaluation reports the loss on the text alone, so dense and MoE dev losses compare.
+    logits, loss = model.eval()(idx, idx)
+    assert torch.allclose(loss, F.cross_entropy(logits.reshape(-1, BASE.vocab_size), idx.reshape(-1)))
     assert model.active_params() < model.num_params()
+
+
+@pytest.mark.parametrize("top_k", [1, 2])
+def test_the_router_learns_from_the_language_modeling_loss(top_k: int) -> None:
+    model = _model(replace(VARIANTS["moe"], moe_top_k=top_k)).train()
+    idx = torch.randint(0, BASE.vocab_size, (2, 8))
+    logits, _ = model(idx)
+    F.cross_entropy(logits.reshape(-1, BASE.vocab_size), idx.reshape(-1)).backward()  # no balancing term
+    grad = model.blocks[0].mlp.router.weight.grad
+    # With top_k=1 the renormalized weight was exactly 1, leaving only rounding noise (~1e-9).
+    assert grad is not None and float(grad.abs().sum()) > 1e-6
 
 
 def test_post_training_adds_the_moe_balancing_loss() -> None:

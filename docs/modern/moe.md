@@ -22,7 +22,8 @@ $$
 ```python
 probs = F.softmax(self.router(flat).float(), dim=-1)        # (tokens, experts)
 weights, chosen = probs.topk(self.top_k, dim=-1)              # (tokens, k)
-weights = weights / weights.sum(dim=-1, keepdim=True)
+if self.top_k > 1:
+    weights = weights / weights.sum(dim=-1, keepdim=True)
 
 out = torch.zeros_like(flat)
 for e, expert in enumerate(self.experts):
@@ -30,6 +31,11 @@ for e, expert in enumerate(self.experts):
     if token_idx.numel():
         out.index_add_(0, token_idx, expert(flat[token_idx]) * weights[token_idx, slot, None])
 ```
+
+With one expert per token (`k = 1`) the weight stays the raw probability `p_e`, as in the
+Switch Transformer. Renormalizing a single weight would make it exactly 1, and then the router
+would get no gradient from the language-modeling loss, only from the balancing loss below, so it
+could never learn which expert actually helps a token.
 
 The loop over experts is the clearest way to write it. Production code sorts tokens by expert
 and runs one grouped matrix multiply, and spreads experts over GPUs (expert parallelism), but
