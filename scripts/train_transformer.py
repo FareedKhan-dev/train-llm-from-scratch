@@ -316,6 +316,14 @@ def restore_training_checkpoint(
         set_optimizer_lr(optimizer, lr_for_step(train_config, next_step))
 
     losses = [float(loss) for loss in checkpoint.get('losses', [])]
+    # The data order is a function of this seed, so the resumed run reuses it and skips the
+    # batches already trained on instead of starting the data again.
+    saved_seed = (checkpoint.get('config') or {}).get('data_seed')
+    if saved_seed is not None:
+        train_config['data_seed'] = int(saved_seed)
+    else:
+        print("This checkpoint predates the recorded data order, so the resumed run reads the "
+              "data in a new order.")
     print(
         f"Resumed from {path}. "
         f"Last completed step: {last_completed_step}. Next step: {next_step}."
@@ -554,6 +562,8 @@ def main() -> None:
     if args.seed is not None:
         torch.manual_seed(args.seed)
         np.random.seed(args.seed)
+    # The seed of the training data order, saved in every checkpoint so --resume continues it.
+    train_config['data_seed'] = int(args.seed if args.seed is not None else np.random.randint(0, 2**31 - 1))
     if train_config["device"] == "cpu":
         configure_cpu_threads(args.threads)
         if not args.preset and train_config["n_embed"] >= 2048:
@@ -658,12 +668,15 @@ def main() -> None:
 
     from data_loader.data_loader import get_batch_iterator
 
-    # Create a batch iterator for the training data.
+    # Create a batch iterator for the training data. A resumed run skips the micro-batches the
+    # earlier steps consumed, so it continues the data order (same batch size and grad_accum).
     batch_iterator = get_batch_iterator(
         train_config['train_path'],
         train_config['t_batch_size'],
         train_config['t_context_length'],
         device=train_config['device'],
+        seed=train_config['data_seed'],
+        skip_batches=start_step * grad_accum,
     )
 
     # Number of tokens processed per optimizer step (batch * context * grad_accum), for throughput.

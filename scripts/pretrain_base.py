@@ -73,7 +73,8 @@ def main():
         extra={"--resume": dict(type=str, default=None, help="checkpoint to resume from")})
     resume = extras.resume
     ctx = ddp_setup(cfg.device)
-    # Different data shuffle per rank (the loader shuffles via numpy global RNG).
+    # A different seed per rank for everything random except the data order, which comes from
+    # the loader's own seed below. DDP copies rank 0's initial weights to every rank.
     set_seed(cfg.seed + ctx.rank)
 
     model = build_model_from_config(cfg).to(ctx.device)
@@ -107,11 +108,20 @@ def main():
         logger = MetricsLogger("pretrain", cfg.log_dir, use_wandb=cfg.use_wandb,
                                wandb_project=cfg.wandb_project, config=asdict(cfg))
 
-    batch_iter = get_batch_iterator(cfg.train_path, cfg.batch_size, cfg.context_length, device=ctx.device)
+    # Every rank shuffles with the same seed and reads its own slice of each global batch, so
+    # the ranks never train on the same window in an epoch. A resumed run skips the batches
+    # the earlier steps consumed, so it continues the data order instead of replaying it.
+    batch_iter = get_batch_iterator(cfg.train_path, cfg.batch_size, cfg.context_length, device=ctx.device,
+                                    seed=cfg.seed, skip_batches=start_step * cfg.grad_accum,
+                                    rank=ctx.rank, world_size=ctx.world_size)
     tokens_per_step = cfg.batch_size * cfg.context_length * cfg.grad_accum * ctx.world_size
 
     model.train()
     t0 = time.perf_counter()
+    accum_loss = float("nan")
+    if start_step >= cfg.train_steps and ctx.is_main:
+        print(f"Nothing to train: the checkpoint already finished step {start_step - 1} of "
+              f"{cfg.train_steps}. Raise --train_steps to continue.")
     for step in range(start_step, cfg.train_steps):
         lr = lr_at(cfg.lr_schedule, step, warmup_steps=cfg.warmup_steps, max_steps=cfg.train_steps,
                    lr=cfg.lr, min_lr=cfg.min_lr)
@@ -154,9 +164,10 @@ def main():
                             cfg=cfg, step=step, metrics={"train_loss": accum_loss})
             print(f"  saved checkpoint -> {cfg.out_ckpt} (step {step})")
 
-    if ctx.is_main:
+    if ctx.is_main and start_step < cfg.train_steps:
+        # `step` is the last completed step everywhere, so a later --resume starts right after it.
         save_stage_ckpt(cfg.out_ckpt, model, optimizer, stage="pretrain", cfg=cfg,
-                        step=cfg.train_steps, metrics={"train_loss": accum_loss})
+                        step=cfg.train_steps - 1, metrics={"train_loss": accum_loss})
         print(f"Done. Final checkpoint -> {cfg.out_ckpt}")
         if logger:
             logger.close()
