@@ -66,6 +66,7 @@ Odambinais is uncertain and fortune established in rural areas.
 - [The Documentation Site](#the-documentation-site)
 - [Run the Whole Thing](#run-the-whole-thing)
 - [Type Safety and Tests](#type-safety-and-tests)
+  - [Reproduce the CI checks with Docker](#reproduce-the-ci-checks-with-docker)
 - [What's Next](#whats-next)
 
 ## Who this is for
@@ -856,6 +857,30 @@ uv run ruff check .
 ```
 
 The [type safety guide](docs/howto/type_safety.md) shows a real bug the shape checks catch and plain PyTorch does not, and [CONTRIBUTING.md](CONTRIBUTING.md) explains how to add code that keeps these checks green.
+
+### Reproduce the CI checks with Docker
+
+A `Dockerfile` builds a GPU image that reproduces the CI environment (torch cu130 + ruff, mypy, pytest) on a real GPU. The torch cu130 wheel bundles the CUDA runtime libraries as `nvidia-*` pip dependencies, so the image only needs Python; the host needs the NVIDIA driver and `nvidia-container-toolkit`, and runs use `--gpus all`.
+
+```bash
+docker build -t train-llm:gpu .
+
+docker run --rm --gpus all train-llm:gpu ruff check .
+docker run --rm --gpus all train-llm:gpu mypy
+docker run --rm --gpus all train-llm:gpu pytest -q   # the default CMD
+```
+
+The test suite targets the CPU path — CI runs it with a CPU torch, and one test (`test_post_training_adds_the_moe_balancing_loss`) uses `DataParallel`, which on a single GPU moves the model to `cuda:0` mid-test and trips a device mismatch on backward. So run the suite on the CPU path even inside the GPU image:
+
+```bash
+docker run --rm -e CUDA_VISIBLE_DEVICES="" train-llm:gpu pytest -q
+```
+
+To iterate against your live source tree, mount the repo over `/app`; the editable install points at `/app`, so the container reads your host files directly:
+
+```bash
+docker run --rm -e CUDA_VISIBLE_DEVICES="" -v "$PWD":/app train-llm:gpu pytest -q
+```
 
 ## What's Next
 

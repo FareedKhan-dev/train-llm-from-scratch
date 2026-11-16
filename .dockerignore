@@ -1,0 +1,47 @@
+# Everything not needed to BUILD the test image is excluded here, to keep the
+# build context small (no datasets, no checkpoints, no generated docs/images).
+# Mirrors .gitignore and adds Docker-context-only entries.
+
+# Git and CI metadata
+.git/
+.github/
+
+# Python caches and build artifacts
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+*.egg-info/
+build/
+dist/
+.ipynb_checkpoints/
+
+# Local environments and tool caches
+.venv/
+.uv-cache/
+.hf-cache/
+.tools/
+node_modules/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.superpowers/
+
+# Generated data, checkpoints and logs (never needed to run the tests)
+data/
+models/
+logs/
+ephemeral/
+*.h5
+*.pt
+*.jsonl
+wandb/
+
+# Generated docs site and diagram sources (not needed to run tests)
+site/
+docs/
+images/
+
+# Editor / OS cruft
+.DS_Store
