@@ -192,8 +192,12 @@ def test_post_training_adds_the_moe_balancing_loss() -> None:
     from src.post_training.utils import moe_balance_loss
 
     model = _model(VARIANTS["moe"])
-    logits, _ = model(torch.randint(0, BASE.vocab_size, (2, 8)))  # no targets, like the SFT trainer
-    extra = moe_balance_loss(torch.nn.DataParallel(model))  # wrappers are looked through
+    # Wrap before the forward pass, as the trainers do: with a GPU visible, DataParallel moves
+    # the model to cuda:0, and a loss built on the CPU before that cannot be backpropagated.
+    wrapped = torch.nn.DataParallel(model)
+    device = next(model.parameters()).device
+    logits, _ = model(torch.randint(0, BASE.vocab_size, (2, 8), device=device))  # no targets, like SFT
+    extra = moe_balance_loss(wrapped)  # wrappers are looked through
     assert isinstance(extra, torch.Tensor) and model.aux_loss is not None
     assert torch.allclose(extra, BASE.moe_aux_loss_coef * model.aux_loss)
     extra.backward()
