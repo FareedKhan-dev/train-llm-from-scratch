@@ -42,7 +42,7 @@ def test_ent_coef_subtracts_the_mean_policy_entropy() -> None:
     logits, _ = actor(seqs)
     logp = F.log_softmax(logits[:, :-1].float(), dim=-1)
     entropy = masked_mean(-(logp.exp() * logp).sum(-1), m)
-    assert float(entropy) > 0
+    assert float(entropy.detach()) > 0
     assert torch.allclose(bonus, base - 0.1 * entropy, atol=1e-6)
 
 
