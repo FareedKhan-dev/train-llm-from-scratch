@@ -1,5 +1,72 @@
 # Changelog
 
+## 1.0.0 (2026-11)
+
+The first stable release. A base model can now be benchmarked the way published models are,
+with scores that match EleutherAI's lm-evaluation-harness, and a review of the training code
+fixed ten bugs that gave quietly wrong results: resumed runs retrained on data they had
+already seen, SFT's gradient accumulation weighted tokens unevenly, and the GSM8K checker that
+rewards the RL stages marked some wrong answers correct. The repo also has a Docker image, and
+the test suite passes with a GPU visible.
+
+### Compatibility notes
+
+These change results compared with 0.2.0, which is why this is 1.0.0:
+
+- **Mixture of Experts with `moe_top_k=1`** now weighs the chosen expert by its router
+  probability instead of exactly 1, as the Switch Transformer does, so the router learns from
+  the language-modeling loss. A checkpoint trained with one expert per token on 0.2.0 gives
+  different outputs; two or more experts per token are unchanged.
+- **The dev loss of MoE models** no longer includes the balancing term (it is added in
+  training only), so it reads about `moe_aux_loss_coef` lower than before and now compares
+  with dense models.
+- **SFT with `grad_accum` above 1** trains on the true full-batch gradient, so its loss curves
+  differ from 0.2.0's.
+- **GSM8K scores** can move slightly, because the answer checker now reads `.5`, `10-15` and
+  `5 + 3 = 8` correctly.
+- **The data order**: the loader shuffles with its own seed, so a run seeded on 0.2.0 sees its
+  windows in a different order on 1.0.0, and the DDP ranks of `pretrain_base.py` now split
+  each batch instead of drawing independently. The final checkpoint of `pretrain_base.py`
+  records the last completed step (`train_steps - 1`).
+- `requirements.txt` no longer installs `torchvision` and `torchaudio`, which nothing used.
+
+### Added
+
+- **Base-model benchmarks**: `scripts/eval_base.py` and `src/benchmarks/` score ARC-Easy,
+  ARC-Challenge and LAMBADA on any checkpoint, with lm-evaluation-harness's prompts, rules and
+  metrics. On GPT-2 124M it reproduces the harness exactly: the same acc, acc_norm and
+  LAMBADA accuracy on all three tasks, with each of the 19,341 answer log-likelihoods within 0.0006
+  of the harness's and no prediction different. The datasets are pinned to a revision. HellaSwag is left out on purpose:
+  its source repository was taken down by a DMCA notice in September 2026.
+- **A Docker image** for training and for running the checks on a GPU (#43 by @LLiuJJ), with a
+  `TORCH_INDEX` build argument for hosts whose driver predates CUDA 13.
+- `E2E_DEVICE=cuda` runs the end-to-end test of every training stage on a GPU.
+- `get_batch_iterator` takes `seed`, `skip_batches`, `rank` and `world_size`.
+
+### Fixed
+
+- A resumed run trained on the batches of steps 0, 1, 2... again instead of continuing the data
+  order, in both `train_transformer.py` and `pretrain_base.py`. The data seed is now saved in
+  the checkpoint and the resumed run skips what it already trained on.
+- The DDP ranks of `pretrain_base.py` shuffled independently, so they trained on overlapping
+  windows.
+- `pretrain_base.py` saved `step = train_steps` in its final checkpoint, so extending a finished
+  run skipped a step, and resuming one with nothing left to train crashed.
+- With one expert per token, the MoE router got no gradient from the language-modeling loss.
+- MoE dev loss and perplexity included the balancing term.
+- SFT's gradient accumulation averaged micro-batch means, so a token in a micro-batch with few
+  trained tokens weighed far more than one in a full micro-batch (a cosine of 0.66 with the true
+  gradient on a short and a long answer).
+- The GSM8K checker read `<answer>.5</answer>` as 5, the hyphen in `10-15` or `COVID-19` as a
+  minus sign, and an `<answer>` holding `5 + 3 = 8` as 5.
+- PPO's `ent_coef` did nothing; it now adds the entropy bonus.
+- `prepare_pretrain_data.py --max_tokens` was ignored below 8M tokens.
+- `data_download.py` kept an HTTP error page or an interrupted download, which every later run
+  skipped as already downloaded.
+- The test suite failed on any machine with a GPU (found in #43 by @LLiuJJ).
+- `requirements.txt` and `requirements-post.txt` pointed pip at the CUDA 11.8 and 12.1 wheel
+  indexes, which stopped at torch 2.7.1 and 2.5.1.
+
 ## 0.2.0 (2026-10)
 
 A big update: the repo now also runs on a laptop CPU, has a modern version of the model next to
