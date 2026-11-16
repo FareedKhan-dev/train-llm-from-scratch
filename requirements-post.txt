@@ -1,13 +1,11 @@
-# Post-training stack for the from-scratch SFT / RM / PPO / DPO / GRPO suite.
-# Targets H100 + CUDA 12.x (the base requirements.txt pins cu118 for the original
-# pretraining path; this file does NOT overwrite it). Install into a fresh venv:
+# Post-training stack for the from-scratch SFT / RM / PPO / DPO / GRPO suite. Install into
+# a fresh venv:
 #
 #   python3 -m venv .venv && source .venv/bin/activate
 #   pip install -r requirements-post.txt
 #
-# torchrun (multi-GPU) ships with torch.
-
---extra-index-url https://download.pytorch.org/whl/cu121
+# `pip install -e ".[train]"` installs the same packages. torchrun (multi-GPU) ships with
+# torch; see requirements.txt for picking a CUDA build of torch.
 
 torch
 numpy
