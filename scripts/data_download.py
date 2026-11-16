@@ -14,17 +14,30 @@ def download_file(url: str, file_name: str) -> None:
     Downloads a file from the given URL and saves it with the specified file name.
     Displays a progress bar using tqdm.
 
+    The bytes go to ``file_name + ".part"`` first and are renamed only once the download is
+    complete, so an HTTP error or an interrupted download never leaves a file that the next
+    run mistakes for a finished one and skips.
+
     Args:
         url (str): The URL of the file to download.
         file_name (str): The local path where the file will be saved.
     """
     print(f"Downloading: {file_name}...")
-    response = requests.get(url, stream=True)  # Stream the file content
-    total_size = int(response.headers.get('content-length', 0))  # Get total file size if available
-    block_size = 1024  # Size of each block for the progress bar
-    with open(file_name, 'wb') as f:  # Open file for writing in binary mode
-        for chunk in tqdm(response.iter_content(block_size), total=total_size // block_size, desc="Downloading", leave=True):
-            f.write(chunk)  # Write each chunk to the file
+    part = file_name + ".part"
+    with requests.get(url, stream=True, timeout=60) as response:  # Stream the file content
+        response.raise_for_status()  # a 404 or 503 page is not the dataset
+        total_size = int(response.headers.get('content-length', 0))  # Get total file size if available
+        written = 0
+        with open(part, 'wb') as f:  # Open file for writing in binary mode
+            for chunk in tqdm(response.iter_content(1 << 20), total=total_size >> 20, unit="MB",
+                              desc="Downloading", leave=True):
+                f.write(chunk)  # Write each chunk to the file
+                written += len(chunk)
+        # A transfer-encoded body changes size when decoded, so only a plain one is checked.
+        if total_size and not response.headers.get('content-encoding') and written != total_size:
+            os.remove(part)
+            raise OSError(f"{url}: received {written:,} of {total_size:,} bytes. Run the script again.")
+    os.replace(part, file_name)
 
 def download_dataset(val_url: str, train_urls: list[str], val_dir: str, train_dir: str, max_train_files: int) -> None:
     """

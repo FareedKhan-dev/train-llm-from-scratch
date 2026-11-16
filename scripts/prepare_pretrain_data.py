@@ -74,6 +74,8 @@ def iter_texts(zst_path: str):
 
 
 def tokenize_to_h5(zst_paths: list[str], out_path: str, max_tokens: int | None) -> int:
+    if max_tokens is not None and max_tokens <= 0:
+        raise ValueError(f"--max_tokens must be positive, got {max_tokens}")
     enc = tiktoken.get_encoding("r50k_base")
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     total = 0
@@ -83,6 +85,8 @@ def tokenize_to_h5(zst_paths: list[str], out_path: str, max_tokens: int | None) 
 
         def flush():
             nonlocal total, buf
+            if max_tokens is not None:
+                del buf[max(0, max_tokens - total):]  # the file holds exactly max_tokens
             if not buf:
                 return
             arr = np.asarray(buf, dtype=np.int32)
@@ -91,6 +95,15 @@ def tokenize_to_h5(zst_paths: list[str], out_path: str, max_tokens: int | None) 
             total += arr.size
             buf = []
 
+        def full() -> bool:
+            # Count the tokens still in the buffer too: they only reach `total` at a flush.
+            return max_tokens is not None and total + len(buf) >= max_tokens
+
+        def add(docs: list[str]) -> None:
+            for ids in enc.encode_ordinary_batch(docs):
+                buf.extend(ids)
+                buf.append(EOT_ID)
+
         for zp in zst_paths:
             print(f"  tokenizing {zp}")
             docs: list[str] = []
@@ -98,21 +111,17 @@ def tokenize_to_h5(zst_paths: list[str], out_path: str, max_tokens: int | None) 
             for txt in pbar:
                 docs.append(txt)
                 if len(docs) >= ENC_BATCH:
-                    for ids in enc.encode_ordinary_batch(docs):
-                        buf.extend(ids)
-                        buf.append(EOT_ID)
+                    add(docs)
                     docs = []
+                    if full():
+                        break
                     if len(buf) >= WRITE_CHUNK:
                         flush()
                         pbar.set_postfix(tokens=f"{total/1e6:.1f}M")
-                    if max_tokens and total >= max_tokens:
-                        break
-            if docs:
-                for ids in enc.encode_ordinary_batch(docs):
-                    buf.extend(ids)
-                    buf.append(EOT_ID)
+            if docs and not full():
+                add(docs)
             flush()
-            if max_tokens and total >= max_tokens:
+            if full():
                 break
     print(f"  wrote {total:,} tokens -> {out_path}")
     return total
