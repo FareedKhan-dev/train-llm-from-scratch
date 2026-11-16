@@ -97,8 +97,9 @@ def moe_balance_loss(model: nn.Module) -> torch.Tensor | float:
     """The Mixture-of-Experts balancing loss of the last forward pass, times its coefficient.
 
     The modern model adds this loss itself only when it is given targets. The post-training
-    losses are computed outside the model, so the stages add it with this helper. It is 0 for
-    dense models.
+    losses are computed outside the model, so SFT adds it with this helper. The preference and
+    RL stages deliberately do not, as most fine-tuning setups (see docs/modern/moe.md). It is 0
+    for dense models.
     """
     inner = unwrap(model)
     if isinstance(inner, ModernTransformer) and inner.aux_loss is not None:

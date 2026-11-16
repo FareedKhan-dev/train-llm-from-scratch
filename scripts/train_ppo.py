@@ -45,13 +45,37 @@ from src.post_training.utils import (
 from src.post_training.value_head import TransformerWithValueHead
 
 
-def actor_logp_values(actor, seqs, temperature):
-    """One forward through the actor-critic -> (logp, values) in the action frame (B,T-1)."""
+def actor_logp_values(actor, seqs, temperature, with_entropy: bool = False):
+    """One forward through the actor-critic -> (logp, values) in the action frame (B,T-1).
+
+    With ``with_entropy`` it also returns the per-token entropy of the policy, with its
+    gradient, for the PPO entropy bonus.
+    """
     logits, values = actor(seqs)
     logits = logits[:, :-1, :]
     logp_all = F.log_softmax(logits.float() / max(temperature, 1e-6), dim=-1)
     logp = logp_all.gather(-1, seqs[:, 1:, None]).squeeze(-1)
+    if with_entropy:
+        return logp, values[:, :-1], -(logp_all.exp() * logp_all).sum(dim=-1)
     return logp, values[:, :-1]
+
+
+def ppo_minibatch_loss(actor, seqs, m, old_logp, old_values, adv, returns, cfg, device):
+    """The loss of one PPO minibatch: the clipped policy loss, ``vf_coef`` times the value loss,
+    and, when ``ent_coef`` is set, minus ``ent_coef`` times the mean policy entropy, a bonus
+    that keeps the policy from collapsing onto one answer too early.
+
+    Returns ``(loss, policy_loss, value_loss, clip_fraction, new_logp)``.
+    """
+    with amp_autocast(cfg.amp_dtype, device):
+        out = actor_logp_values(actor, seqs, cfg.temperature, with_entropy=cfg.ent_coef > 0)
+    new_logp, new_values = out[0], out[1]
+    p_loss, clipf = ppo_policy_loss(new_logp.float(), old_logp, adv, m, clip=cfg.clip)
+    v_loss = ppo_value_loss(new_values.float(), old_values, returns, m, vf_clip=cfg.vf_clip)
+    loss = p_loss + cfg.vf_coef * v_loss
+    if cfg.ent_coef > 0:
+        loss = loss - cfg.ent_coef * masked_mean(out[2].float(), m)
+    return loss, p_loss, v_loss, clipf, new_logp
 
 
 def seq_lengths_from_mask(response_mask, prompt_lens):
@@ -128,12 +152,9 @@ def main():
             perm = torch.randperm(N, device=ctx.device)
             for s in range(0, N, cfg.minibatch_size):
                 mb = perm[s:s + cfg.minibatch_size]
-                with amp_autocast(cfg.amp_dtype, ctx.device):
-                    new_logp, new_values = actor_logp_values(actor_ddp, seqs[mb], cfg.temperature)
                 m = resp[mb]
-                p_loss, clipf = ppo_policy_loss(new_logp.float(), old_logp[mb], adv[mb], m, clip=cfg.clip)
-                v_loss = ppo_value_loss(new_values.float(), old_values[mb], returns[mb], m, vf_clip=cfg.vf_clip)
-                loss = p_loss + cfg.vf_coef * v_loss
+                loss, p_loss, v_loss, clipf, new_logp = ppo_minibatch_loss(
+                    actor_ddp, seqs[mb], m, old_logp[mb], old_values[mb], adv[mb], returns[mb], cfg, ctx.device)
                 optimizer.zero_grad(set_to_none=True)
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(actor_ddp.parameters(), cfg.grad_clip)

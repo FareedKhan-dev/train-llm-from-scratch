@@ -213,7 +213,7 @@ class PPOConfig(BaseModelConfig):
     clip: float = 0.2
     vf_clip: float = 0.2
     vf_coef: float = 0.5
-    ent_coef: float = 0.0
+    ent_coef: float = 0.0  # entropy bonus: subtract ent_coef * mean policy entropy from the loss
     gamma: float = 1.0
     gae_lambda: float = 0.95
     kl_coef: float = 0.05              # penalty on KL(policy || ref) added to reward
